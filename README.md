@@ -8,7 +8,7 @@ A daily AI-generated podcast briefing for two UC Berkeley Haas courses:
 
 Each day, the app:
 1. Searches the web for relevant news and articles (via Anthropic + web search)
-2. Synthesizes a 5–10 minute podcast script with a narrative thread across both courses
+2. Synthesizes a podcast script with a narrative thread across both courses
 3. Generates audio using ElevenLabs (voice: Megan – Light and Clear)
 
 You can also contribute specific URLs to include in the next episode.
@@ -20,7 +20,7 @@ You can also contribute specific URLs to include in the next episode.
 - **AI**: Anthropic API (`claude-sonnet-4-20250514`) with `web_search_20250305` tool
 - **Audio**: ElevenLabs text-to-speech API
 - **Frontend**: React (CDN), Tailwind (CDN) — no build step
-- **Hosting**: Railway (with persistent volume for DB + audio files)
+- **Hosting**: Railway
 
 ## Pages
 
@@ -43,6 +43,7 @@ Hosted on Railway at: `https://course-podcast-v0-production.up.railway.app`
 ANTHROPIC_API_KEY=...
 ELEVENLABS_API_KEY=...
 ELEVENLABS_VOICE_ID=E393dkE75hqtz1LO2aEJ
+BASE_URL=https://course-podcast-v0-production.up.railway.app
 PORT=3000
 ```
 
@@ -57,6 +58,19 @@ node --no-warnings server.js
 ```
 
 Requires Node 22.5+.
+
+## How generation works (important)
+
+Both episode generation and audio generation are **long-running tasks** — too long for a normal HTTP request. Railway's proxy cuts connections after 60 seconds, and a full episode cycle (web search + script + audio) takes 3–5 minutes.
+
+The fix: both operations use a **background job + polling** pattern:
+
+1. Clicking "Generate today's episode" or "Generate Audio" triggers a POST that returns immediately with a job ID
+2. The actual work runs in the background on the server
+3. The UI polls for status every 3 seconds and shows live progress ("Searching for sources…", "Generating audio with ElevenLabs…")
+4. When the job completes, the UI updates automatically
+
+This is why the buttons show a status message rather than just spinning — and why they'll keep working even for very long episodes.
 
 ## Editing the app over time
 
@@ -73,18 +87,13 @@ All logic lives in two files: `server.js` (backend) and `public/index.html` (fro
 
 ### Changing episode length or style
 
-The episode script is controlled by `scriptPrompt` in `server.js`. Find this block:
-
-```js
-const scriptPrompt = `You are the host of a daily podcast briefing...
-...Be 5–10 minutes when read aloud (~800–1,500 words)...`;
-```
+The episode script is controlled by `scriptPrompt` in `server.js`. Find the block that starts with `const scriptPrompt = \`...`.
 
 Examples of what you can change:
 
 | Goal | What to edit |
 |------|-------------|
-| Longer episodes | Change `5–10 minutes` → `12–15 minutes (~2,000–2,500 words)` |
+| Longer episodes | Change the word/minute target in the prompt |
 | More academic tone | Add: `Use a more analytical, lecture-style tone suitable for MBA students.` |
 | Focus on one course | Remove the other course from the prompt |
 | Add a recurring segment | Add: `End every episode with a "Question of the Day" for class discussion.` |
@@ -93,16 +102,7 @@ Examples of what you can change:
 
 ### Changing the courses covered
 
-The courses are defined near the top of `server.js`:
-
-```js
-const COURSES = [
-  { id: 1, name: "Intimate Technology", level: "undergrad" },
-  { id: 2, name: "Social Impact Strategy in Commercial Tech", level: "mba" }
-];
-```
-
-Edit the names, add a third course, or remove one entirely.
+The course descriptions are embedded in `discoveryPrompt` and `scriptPrompt` inside `server.js`. Search for "Intimate Technology" to find the right spots and edit the course names and descriptions there.
 
 ---
 
@@ -135,9 +135,10 @@ To add it to Apple Podcasts: **File → Follow a Podcast… → paste the URL.**
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/episodes` | List all episodes |
-| POST | `/api/episodes/generate` | Generate today's episode (Anthropic + web search) |
-| GET | `/api/episodes/generate/status` | Poll background generation job status |
-| POST | `/api/episodes/:id/audio` | Generate audio for an episode (ElevenLabs) |
+| POST | `/api/episodes/generate` | Start background episode generation |
+| GET | `/api/episodes/generate/status` | Poll episode generation job status |
+| POST | `/api/episodes/:id/audio` | Start background audio generation (ElevenLabs) |
+| GET | `/api/episodes/:id/audio/status` | Poll audio generation job status |
 | GET | `/api/sources` | Search all sources |
 | GET/POST | `/api/themes` | List or add themes |
 | POST | `/api/contributed` | Submit a URL |
