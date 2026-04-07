@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Briefing</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f0d;
+      --surface: #1a1a17;
+      --surface2: #222220;
+      --border: #2e2e2a;
+      --accent: #c8a96e;
+      --accent-dim: #8a7048;
+      --text: #e8e6df;
+      --text-muted: #7a7870;
+      --text-dim: #b0ae a7;
+      --intimate: #7eb8c9;
+      --impact: #9fbb8a;
+      --shared: #c8a96e;
+      --red: #c06060;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* Layout */
+    .app { display: flex; min-height: 100vh; }
+
+    .sidebar {
+      width: 220px;
+      min-width: 220px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      overflow-y: auto;
+      z-index: 10;
+    }
+
+    .main {
+      margin-left: 220px;
+      flex: 1;
+      max-width: 820px;
+      padding: 48px 48px 80px;
+    }
+
+    /* Sidebar */
+    .sidebar-header {
+      padding: 28px 20px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-logo {
+      font-family: 'Playfair Display', serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.02em;
+    }
+    .sidebar-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .sidebar-nav { padding: 16px 0; flex: 1; }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 20px;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+      border-left: 2px solid transparent;
+      letter-spacing: 0.01em;
+    }
+    .nav-item:hover { color: var(--text); background: var(--surface2); }
+    .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(200,169,110,0.06); }
+    .nav-icon { font-size: 15px; width: 18px; text-align: center; }
+
+    .sidebar-footer {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Page sections */
+    .page-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 32px;
+      font-weight: 400;
+      color: var(--text);
+      margin-bottom: 6px;
+      line-height: 1.2;
+    }
+    .page-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 36px;
+      letter-spacing: 0.01em;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .card-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 18px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: 'Inter', sans-serif;
+      letter-spacing: 0.02em;
+    }
+    .btn-primary { background: var(--accent); color: #0f0f0d; }
+    .btn-primary:hover { background: #d4b87a; }
+    .btn-primary:disabled { background: var(--accent-dim); cursor: not-allowed; opacity: 0.6; }
+    .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { color: var(--text); border-color: var(--text-muted); }
+    .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); }
+    .btn-danger:hover { background: rgba(192,96,96,0.1); }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+    /* Audio player */
+    .audio-player {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+    .audio-player audio { width: 100%; margin-top: 8px; }
+    .audio-player audio::-webkit-media-controls-panel { background: var(--surface2); }
+
+    .audio-actions { display: flex; gap: 10px; margin-top: 12px; align-items: center; }
+
+    /* Script */
+    .script-text {
+      font-size: 15px;
+      line-height: 1.85;
+      color: var(--text);
+      white-space: pre-wrap;
+      font-family: 'Inter', sans-serif;
+      font-weight: 300;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 24px;
+      margin: 16px 0;
+    }
+
+    /* Tags */
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .tag-intimate { background: rgba(126,184,201,0.15); color: var(--intimate); }
+    .tag-impact { background: rgba(159,187,138,0.15); color: var(--impact); }
+    .tag-shared { background: rgba(200,169,110,0.15); color: var(--shared); }
+    .tag-contributed { background: rgba(192,96,96,0.15); color: var(--red); }
+
+    /* Source list */
+    .source-item {
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 16px;
+      margin-bottom: 10px;
+      background: var(--surface);
+      transition: border-color 0.15s;
+    }
+    .source-item:hover { border-color: var(--accent-dim); }
+    .source-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .source-title a { color: inherit; text-decoration: none; }
+    .source-title a:hover { color: var(--accent); }
+    .source-summary { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 8px; }
+    .source-footer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    /* Inputs */
+    input[type="text"], input[type="url"], textarea, select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 9px 12px;
+      font-size: 13px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus, input[type="url"]:focus, textarea:focus, select:focus {
+      border-color: var(--accent-dim);
+    }
+    textarea { resize: vertical; min-height: 80px; }
+    label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 0.03em; text-transform: uppercase; }
+    .form-group { margin-bottom: 16px; }
+
+    /* Theme grid */
+    .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .theme-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .theme-item.active { color: var(--text); border-color: var(--accent-dim); }
+    .theme-toggle {
+      width: 16px; height: 16px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      background: transparent;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .theme-toggle.checked { background: var(--accent); border-color: var(--accent); }
+    .theme-name { flex: 1; line-height: 1.3; }
+    .theme-actions { display: flex; gap: 6px; }
+
+    /* Episode list */
+    .ep-item {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ep-item:hover .ep-title { color: var(--accent); }
+    .ep-num { font-size: 12px; color: var(--text-muted); min-width: 28px; }
+    .ep-title { font-size: 14px; color: var(--text); flex: 1; }
+    .ep-meta { font-size: 12px; color: var(--text-muted); }
+
+    /* Search */
+    .search-bar { position: relative; margin-bottom: 24px; }
+    .search-bar input { padding-left: 36px; }
+    .search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 14px; }
+
+    /* Status/spinner */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid var(--accent-dim);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status-line {
+      font-size: 13px;
+      color: var(--text-muted);
+      padding: 12px 0;
+      border-top: 1px solid var(--border);
+      margin-top: 16px;
+    }
+    .status-line.error { color: var(--red); }
+
+    /* Dividers */
+    .section-label {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin: 28px 0 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .empty-state { text-align: center; padding: 48px 0; color: var(--text-muted); font-size: 14px; }
+
+    /* Feedback */
+    .feedback-item {
+      background: var(--surface2);
+      border-left: 2px solid var(--accent-dim);
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      border-radius: 0 4px 4px 0;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .feedback-date { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+    /* Generate page */
+    .generate-hero {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 36px;
+      text-align: center;
+      background: var(--surface);
+      margin-bottom: 28px;
+    }
+    .generate-hero-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 24px;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+    .generate-hero-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.6; }
+
+    .progress-steps { margin: 20px 0; }
+    .progress-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 0;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+    .step-dot.active { background: var(--accent); box-shadow: 0 0 6px rgba(200,169,110,0.4); }
+    .step-dot.done { background: var(--impact); }
+
+    @media (max-width: 768px) {
+      .sidebar { width: 100%; height: auto; position: relative; }
+      .main { margin-left: 0; padding: 24px; }
+      .theme-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const API = '';
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    ...opts,
+    body: opts.body ? (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)) : undefined,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+function CourseTag({ courses }) {
+  if (!courses || courses.length === 0) return null;
+  const hasIntimate = courses.includes('intimate_tech');
+  const hasImpact = courses.includes('social_impact');
+  if (hasIntimate && hasImpact) return <span className="tag tag-shared">Both Courses</span>;
+  if (hasIntimate) return <span className="tag tag-intimate">Intimate Tech</span>;
+  if (hasImpact) return <span className="tag tag-impact">Social Impact</span>;
+  return null;
+}
+
+// ── TODAY PAGE ──────────────────────────────────────────────────────────────
+
+function TodayPage({ onNavigate }) {
+  const [episodes, setEpisodes] = useState([]);
+  const [latest, setLatest] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [generatingAudio, setGeneratingAudio] = useState(false);
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+  const [showScript, setShowScript] = useState(false);
+  const [feedbackNote, setFeedbackNote] = useState('');
+  const [feedbackSource, setFeedbackSource] = useState('');
+  const [feedback, setFeedback] = useState([]);
+
+  const load = useCallback(async () => {
+    try {
+      const eps = await apiFetch('/api/episodes');
+      setEpisodes(eps);
+      if (eps.length > 0) {
+        const ep = await apiFetch(`/api/episodes/${eps[0].id}`);
+        setLatest(ep);
+        const fb = await apiFetch(`/api/feedback?episode_id=${eps[0].id}`);
+        setFeedback(fb);
+      }
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function generate() {
+    setGenerating(true);
+    setError('');
+    setStatus('Searching the web for today\'s stories…');
+    try {
+      const data = await apiFetch('/api/episodes/generate', { method: 'POST', body: {} });
+      setStatus('');
+      setLatest({ ...data.episode, sources: data.sources });
+      await load();
+    } catch (e) {
+      setError(e.message);
+      setStatus('');
+    }
+    setGenerating(false);
+  }
+
+  async function generateAudio() {
+    if (!latest) return;
+    setGeneratingAudio(true);
+    setError('');
+    setStatus('Generating audio with ElevenLabs…');
+    try {
+      const data = await apiFetch(`/api/episodes/${latest.id}/audio`, { method: 'POST', body: {} });
+      setLatest(prev => ({ ...prev, audio_filename: data.filename }));
+      setStatus('');
+    } catch (e) {
+      setError(e.message);
+      setStatus('');
+    }
+    setGeneratingAudio(false);
+  }
+
+  async function submitFeedback(e) {
+    e.preventDefault();
+    if (!feedbackNote.trim()) return;
+    try {
+      await apiFetch('/api/feedback', {
+        method: 'POST',
+        body: { note: feedbackNote, episode_id: latest?.id, source_id: feedbackSource || null }
+      });
+      setFeedbackNote('');
+      setFeedbackSource('');
+      const fb = await apiFetch(`/api/feedback?episode_id=${latest.id}`);
+      setFeedback(fb);
+    } catch (e) { setError(e.message); }
+  }
+
+  if (loading) return <div style={{padding: '48px', color: 'var(--text-muted)'}}>Loading…</div>;
+
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  return (
+    <div>
+      <p className="page-subtitle">{today}</p>
+      <h1 className="page-title">Today's Briefing</h1>
+
+      {!latest && !generating && (
+        <div className="generate-hero">
+          <div className="generate-hero-title">No episode yet for today</div>
+          <div className="generate-hero-sub">
+            Generate today's briefing to search the web for relevant stories across<br />
+            Intimate Technology and Social Impact Strategy.
+          </div>
+          <button className="btn btn-primary" onClick={generate}>
+            Generate Today's Episode
+          </button>
+        </div>
+      )}
+
+      {generating && (
+        <div className="generate-hero">
+          <div className="generate-hero-title">Generating Episode {(episodes[0]?.number || 0) + 1}</div>
+          <div style={{display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'center', marginTop: '16px'}}>
+            <div className="spinner"></div>
+            <span style={{fontSize: '13px', color: 'var(--text-muted)'}}>{status}</span>
+          </div>
+          <div className="progress-steps" style={{textAlign: 'left', maxWidth: '280px', margin: '20px auto 0'}}>
+            <div className="progress-step"><div className="step-dot done"></div>Connecting to Anthropic API</div>
+            <div className="progress-step"><div className="step-dot active"></div>Searching the web for stories</div>
+            <div className="progress-step"><div className="step-dot"></div>Synthesizing podcast script</div>
+            <div className="progress-step"><div className="step-dot"></div>Saving to source repository</div>
+          </div>
+        </div>
+      )}
+
+      {latest && !generating && (
+        <>
+          <div className="card">
+            <div className="card-meta">Episode {latest.number} · {latest.date} · ~{latest.duration_estimate} min</div>
+            <div className="card-title" style={{marginBottom: '14px'}}>
+              {latest.source_count} sources · {latest.audio_filename ? 'Audio ready' : 'Script ready'}
+            </div>
+
+            {latest.audio_filename ? (
+              <div className="audio-player">
+                <div style={{fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Audio</div>
+                <audio controls src={`/audio/${latest.audio_filename}`} />
+                <div className="audio-actions">
+                  <a href={`/audio/${latest.audio_filename}`} download className="btn btn-ghost btn-sm">
+                    ↓ Download MP3
+                  </a>
+                  <span style={{fontSize: '12px', color: 'var(--text-muted)'}}>Save to iPhone via Files app</span>
+                </div>
+              </div>
+            ) : (
+              <button
+                className="btn btn-primary"
+                onClick={generateAudio}
+                disabled={generatingAudio}
+                style={{marginBottom: '8px'}}
+              >
+                {generatingAudio ? <><div className="spinner"></div> Generating Audio…</> : '▶ Generate Audio'}
+              </button>
+            )}
+
+            <div style={{marginTop: '14px'}}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowScript(s => !s)}>
+                {showScript ? 'Hide Script' : 'View Script'}
+              </button>
+            </div>
+
+            {showScript && latest.script && (
+              <div className="script-text">{latest.script}</div>
+            )}
+          </div>
+
+          {/* Sources */}
+          <div className="section-label">Sources ({(latest.sources || []).length})</div>
+          {(latest.sources || []).map(s => (
+            <SourceCard key={s.id} source={s} showFeedback />
+          ))}
+
+          {/* Feedback */}
+          <div className="section-label">Notes & Questions</div>
+          {feedback.map(f => (
+            <div key={f.id} className="feedback-item">
+              {f.source_title && <div style={{fontSize: '11px', color: 'var(--accent)', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.04em'}}>Re: {f.source_title}</div>}
+              {f.note}
+              <div className="feedback-date">{new Date(f.created_at).toLocaleString()}</div>
+            </div>
+          ))}
+
+          <form onSubmit={submitFeedback} style={{marginTop: '16px'}}>
+            <div className="form-group">
+              <label>Leave a Note or Question</label>
+              <textarea
+                value={feedbackNote}
+                onChange={e => setFeedbackNote(e.target.value)}
+                placeholder="Ask a question about a source, note something to follow up on…"
+              />
+            </div>
+            {latest.sources?.length > 0 && (
+              <div className="form-group">
+                <label>About a specific source (optional)</label>
+                <select value={feedbackSource} onChange={e => setFeedbackSource(e.target.value)}>
+                  <option value="">General episode note</option>
+                  {(latest.sources || []).map(s => (
+                    <option key={s.id} value={s.id}>{s.title}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <button type="submit" className="btn btn-ghost btn-sm">Save Note</button>
+          </form>
+        </>
+      )}
+
+      {error && <div className="status-line error">Error: {error}</div>}
+
+      {!generating && (
+        <div style={{marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--border)'}}>
+          <button className="btn btn-ghost btn-sm" onClick={generate}>
+            {latest ? 'Regenerate Today\'s Episode' : 'Generate Episode'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── SOURCE CARD ─────────────────────────────────────────────────────────────
+
+function SourceCard({ source }) {
+  const [showFb, setShowFb] = useState(false);
+  const [note, setNote] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  const courses = typeof source.courses === 'string' ? JSON.parse(source.courses) : (source.courses || []);
+
+  async function saveFeedback(e) {
+    e.preventDefault();
+    if (!note.trim()) return;
+    try {
+      await apiFetch('/api/feedback', { method: 'POST', body: { note, source_id: source.id, episode_id: source.episode_id } });
+      setNote('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {}
+  }
+
+  return (
+    <div className="source-item">
+      <div className="source-title">
+        {source.url ? <a href={source.url} target="_blank" rel="noopener">{source.title}</a> : source.title}
+      </div>
+      {source.summary && <div className="source-summary">{source.summary}</div>}
+      <div className="source-footer">
+        <CourseTag courses={courses} />
+        {source.contributed === 1 && <span className="tag tag-contributed">Contributed</span>}
+        {source.episode_number && <span style={{fontSize: '11px', color: 'var(--text-muted)'}}>Ep. {source.episode_number}</span>}
+        {source.published_date && <span style={{fontSize: '11px', color: 'var(--text-muted)'}}>{source.published_date}</span>}
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{marginLeft: 'auto', fontSize: '11px', padding: '3px 8px'}}
+          onClick={() => setShowFb(s => !s)}
+        >note</button>
+      </div>
+      {showFb && (
+        <form onSubmit={saveFeedback} style={{marginTop: '12px', display: 'flex', gap: '8px'}}>
+          <input
+            type="text"
+            value={note}
+            onChange={e => setNote(e.target.value)}
+            placeholder="Add a note about this source…"
+            style={{flex: 1}}
+          />
+          <button type="submit" className="btn btn-ghost btn-sm">{saved ? '✓' : 'Save'}</button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+// ── ARCHIVE PAGE ─────────────────────────────────────────────────────────────
+
+function ArchivePage() {
+  const [episodes, setEpisodes] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiFetch('/api/episodes').then(eps => { setEpisodes(eps); setLoading(false); });
+  }, []);
+
+  async function selectEp(ep) {
+    const full = await apiFetch(`/api/episodes/${ep.id}`);
+    setSelected(full);
+  }
+
+  if (loading) return <div style={{padding:'48px',color:'var(--text-muted)'}}>Loading…</div>;
+
+  if (selected) return (
+    <div>
+      <button className="btn btn-ghost btn-sm" onClick={() => setSelected(null)} style={{marginBottom:'24px'}}>
+        ← All Episodes
+      </button>
+      <div className="card-meta">Episode {selected.number} · {selected.date}</div>
+      <h1 className="page-title" style={{marginBottom:'24px'}}>Episode {selected.number}</h1>
+
+      {selected.audio_filename && (
+        <div className="audio-player">
+          <audio controls src={`/audio/${selected.audio_filename}`} />
+          <div className="audio-actions">
+            <a href={`/audio/${selected.audio_filename}`} download className="btn btn-ghost btn-sm">↓ Download</a>
+          </div>
+        </div>
+      )}
+
+      {selected.script && <div className="script-text">{selected.script}</div>}
+
+      <div className="section-label">Sources</div>
+      {(selected.sources || []).map(s => <SourceCard key={s.id} source={s} />)}
+    </div>
+  );
+
+  return (
+    <div>
+      <h1 className="page-title">Archive</h1>
+      <p className="page-subtitle">{episodes.length} episodes</p>
+      {episodes.length === 0 && <div className="empty-state">No episodes yet.</div>}
+      {episodes.map(ep => (
+        <div key={ep.id} className="ep-item" onClick={() => selectEp(ep)}>
+          <span className="ep-num">#{ep.number}</span>
+          <span className="ep-title">{ep.date}</span>
+          <span className="ep-meta">{ep.source_count} sources · ~{ep.duration_estimate} min</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── SOURCES PAGE ─────────────────────────────────────────────────────────────
+
+function SourcesPage() {
+  const [sources, setSources] = useState([]);
+  const [q, setQ] = useState('');
+  const [course, setCourse] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (course) params.set('course', course);
+    const data = await apiFetch(`/api/sources?${params}`);
+    setSources(data);
+    setLoading(false);
+  }, [q, course]);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <div>
+      <h1 className="page-title">Source Repository</h1>
+      <p className="page-subtitle">Every article and source used across all episodes</p>
+
+      <div style={{display:'flex', gap:'12px', marginBottom:'24px', flexWrap:'wrap'}}>
+        <div className="search-bar" style={{flex:1}}>
+          <span className="search-icon">⌕</span>
+          <input
+            type="text"
+            placeholder="Search titles, summaries, URLs…"
+            value={q}
+            onChange={e => setQ(e.target.value)}
+          />
+        </div>
+        <select value={course} onChange={e => setCourse(e.target.value)} style={{width:'180px'}}>
+          <option value="">All courses</option>
+          <option value="intimate_tech">Intimate Technology</option>
+          <option value="social_impact">Social Impact Strategy</option>
+        </select>
+      </div>
+
+      {loading && <div style={{color:'var(--text-muted)',fontSize:'13px'}}>Loading…</div>}
+      {!loading && sources.length === 0 && <div className="empty-state">No sources found.</div>}
+      {!loading && sources.map(s => <SourceCard key={s.id} source={s} />)}
+    </div>
+  );
+}
+
+// ── CONTRIBUTE PAGE ──────────────────────────────────────────────────────────
+
+function ContributePage() {
+  const [url, setUrl] = useState('');
+  const [note, setNote] = useState('');
+  const [pending, setPending] = useState([]);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    apiFetch('/api/contributed').then(setPending);
+  }, []);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!url.trim()) return;
+    try {
+      await apiFetch('/api/contributed', { method: 'POST', body: { url, note } });
+      setUrl(''); setNote('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+      const updated = await apiFetch('/api/contributed');
+      setPending(updated);
+    } catch (e) { setError(e.message); }
+  }
+
+  const unused = pending.filter(u => !u.used);
+  const used = pending.filter(u => u.used);
+
+  return (
+    <div>
+      <h1 className="page-title">Contribute a Source</h1>
+      <p className="page-subtitle">Paste a URL to add it to the next episode's source pool</p>
+
+      <div className="card">
+        <form onSubmit={submit}>
+          <div className="form-group">
+            <label>URL</label>
+            <input
+              type="url"
+              value={url}
+              onChange={e => setUrl(e.target.value)}
+              placeholder="https://…"
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>Note (optional)</label>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Why this source matters, which course it connects to, anything to tell Claude…"
+            />
+          </div>
+          <button type="submit" className="btn btn-primary">
+            {saved ? '✓ Added' : 'Add to Queue'}
+          </button>
+          {error && <div className="status-line error">{error}</div>}
+        </form>
+      </div>
+
+      {unused.length > 0 && (
+        <>
+          <div className="section-label">Queued for next episode ({unused.length})</div>
+          {unused.map(u => (
+            <div key={u.id} className="source-item">
+              <div className="source-title"><a href={u.url} target="_blank" rel="noopener">{u.url}</a></div>
+              {u.note && <div className="source-summary">{u.note}</div>}
+              <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'6px'}}>{new Date(u.created_at).toLocaleString()}</div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {used.length > 0 && (
+        <>
+          <div className="section-label">Previously used</div>
+          {used.map(u => (
+            <div key={u.id} className="source-item" style={{opacity:0.6}}>
+              <div className="source-title"><a href={u.url} target="_blank" rel="noopener">{u.url}</a></div>
+              {u.note && <div className="source-summary">{u.note}</div>}
+              <span className="tag tag-contributed" style={{marginTop:'6px',display:'inline-block'}}>Used in Ep. {u.episode_id}</span>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── THEMES PAGE ──────────────────────────────────────────────────────────────
+
+function ThemesPage() {
+  const [themes, setThemes] = useState([]);
+  const [newName, setNewName] = useState('');
+  const [newCourse, setNewCourse] = useState('shared');
+  const [error, setError] = useState('');
+
+  const load = () => apiFetch('/api/themes').then(setThemes);
+  useEffect(() => { load(); }, []);
+
+  async function toggle(theme) {
+    await apiFetch(`/api/themes/${theme.id}`, { method: 'PATCH', body: { active: !theme.active } });
+    load();
+  }
+
+  async function addTheme(e) {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    try {
+      await apiFetch('/api/themes', { method: 'POST', body: { name: newName, course: newCourse } });
+      setNewName('');
+      load();
+    } catch (e) { setError(e.message); }
+  }
+
+  async function deleteTheme(id) {
+    if (!confirm('Delete this theme?')) return;
+    await apiFetch(`/api/themes/${id}`, { method: 'DELETE' });
+    load();
+  }
+
+  const grouped = {
+    intimate_tech: themes.filter(t => t.course === 'intimate_tech'),
+    social_impact: themes.filter(t => t.course === 'social_impact'),
+    shared: themes.filter(t => t.course === 'shared'),
+  };
+
+  const courseLabels = {
+    intimate_tech: 'Intimate Technology',
+    social_impact: 'Social Impact Strategy',
+    shared: 'Shared Themes',
+  };
+
+  return (
+    <div>
+      <h1 className="page-title">Topic Themes</h1>
+      <p className="page-subtitle">Active themes are searched on every episode generation. Toggle or add any time.</p>
+
+      {Object.entries(grouped).map(([course, list]) => (
+        <div key={course}>
+          <div className="section-label">{courseLabels[course]}</div>
+          <div className="theme-grid">
+            {list.map(t => (
+              <div key={t.id} className={`theme-item ${t.active ? 'active' : ''}`}>
+                <div
+                  className={`theme-toggle ${t.active ? 'checked' : ''}`}
+                  onClick={() => toggle(t)}
+                  title={t.active ? 'Disable' : 'Enable'}
+                >
+                  {t.active && <span style={{color:'#0f0f0d',fontSize:'10px',fontWeight:'bold'}}>✓</span>}
+                </div>
+                <span className="theme-name">{t.name}</span>
+                <button
+                  onClick={() => deleteTheme(t.id)}
+                  style={{background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'14px',padding:'0 2px',lineHeight:1}}
+                  title="Delete"
+                >×</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div className="section-label">Add New Theme</div>
+      <div className="card">
+        <form onSubmit={addTheme} style={{display:'flex',gap:'10px',flexWrap:'wrap'}}>
+          <input
+            type="text"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            placeholder="Theme name…"
+            style={{flex:2,minWidth:'200px'}}
+          />
+          <select value={newCourse} onChange={e => setNewCourse(e.target.value)} style={{flex:1,minWidth:'160px'}}>
+            <option value="intimate_tech">Intimate Technology</option>
+            <option value="social_impact">Social Impact Strategy</option>
+            <option value="shared">Shared</option>
+          </select>
+          <button type="submit" className="btn btn-primary">Add</button>
+        </form>
+        {error && <div className="status-line error">{error}</div>}
+      </div>
+    </div>
+  );
+}
+
+// ── SETTINGS PAGE ────────────────────────────────────────────────────────────
+
+function SettingsPage() {
+  const [voices, setVoices] = useState([]);
+  const [config, setConfig] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [voiceSearch, setVoiceSearch] = useState('megan');
+
+  useEffect(() => {
+    Promise.all([
+      apiFetch('/api/config'),
+      apiFetch('/api/voices').catch(() => [])
+    ]).then(([cfg, vcs]) => {
+      setConfig(cfg);
+      setVoices(vcs);
+      setLoading(false);
+    });
+  }, []);
+
+  const filteredVoices = voices.filter(v =>
+    v.name.toLowerCase().includes(voiceSearch.toLowerCase())
+  );
+
+  if (loading) return <div style={{padding:'48px',color:'var(--text-muted)'}}>Loading…</div>;
+
+  return (
+    <div>
+      <h1 className="page-title">Settings</h1>
+      <p className="page-subtitle">Configuration and API status</p>
+
+      <div className="card">
+        <div className="card-title" style={{fontSize:'15px',marginBottom:'16px'}}>API Status</div>
+        <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'10px',fontSize:'13px'}}>
+            <span style={{color: config?.has_anthropic ? 'var(--impact)' : 'var(--red)'}}>
+              {config?.has_anthropic ? '●' : '○'}
+            </span>
+            Anthropic API {config?.has_anthropic ? 'connected' : 'not configured'}
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:'10px',fontSize:'13px'}}>
+            <span style={{color: config?.has_elevenlabs ? 'var(--impact)' : 'var(--red)'}}>
+              {config?.has_elevenlabs ? '●' : '○'}
+            </span>
+            ElevenLabs API {config?.has_elevenlabs ? 'connected' : 'not configured'}
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:'10px',fontSize:'13px'}}>
+            <span style={{color: config?.voice_id ? 'var(--impact)' : 'var(--red)'}}>
+              {config?.voice_id ? '●' : '○'}
+            </span>
+            Voice ID: {config?.voice_id || 'not set — see below'}
+          </div>
+        </div>
+      </div>
+
+      {voices.length > 0 && (
+        <div className="card">
+          <div className="card-title" style={{fontSize:'15px',marginBottom:'6px'}}>Available Voices</div>
+          <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'14px'}}>
+            Set ELEVENLABS_VOICE_ID in your .env to the voice_id below.
+          </div>
+          <div className="form-group">
+            <input
+              type="text"
+              value={voiceSearch}
+              onChange={e => setVoiceSearch(e.target.value)}
+              placeholder="Search voices…"
+            />
+          </div>
+          <div style={{maxHeight:'280px',overflowY:'auto',display:'flex',flexDirection:'column',gap:'6px'}}>
+            {filteredVoices.map(v => (
+              <div key={v.voice_id} style={{
+                padding:'8px 10px',
+                background:'var(--surface2)',
+                border:'1px solid var(--border)',
+                borderRadius:'4px',
+                display:'flex',
+                justifyContent:'space-between',
+                alignItems:'center',
+                fontSize:'13px'
+              }}>
+                <span>{v.name} {v.category && <span style={{color:'var(--text-muted)',fontSize:'11px'}}>({v.category})</span>}</span>
+                <code style={{fontSize:'11px',color:'var(--text-muted)',background:'var(--bg)',padding:'2px 6px',borderRadius:'3px'}}>
+                  {v.voice_id}
+                </code>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-title" style={{fontSize:'15px',marginBottom:'8px'}}>Environment Variables</div>
+        <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'14px'}}>
+          Set these in your .env file or deployment platform's environment settings.
+        </div>
+        <pre style={{
+          background:'var(--bg)',
+          border:'1px solid var(--border)',
+          borderRadius:'4px',
+          padding:'16px',
+          fontSize:'12px',
+          color:'var(--text)',
+          lineHeight:'1.8',
+          overflowX:'auto'
+        }}>{`ANTHROPIC_API_KEY=sk-ant-...
+ELEVENLABS_API_KEY=sk_...
+ELEVENLABS_VOICE_ID=<voice_id from list above>
+PORT=3000`}</pre>
+      </div>
+    </div>
+  );
+}
+
+// ── APP SHELL ────────────────────────────────────────────────────────────────
+
+const PAGES = {
+  today: { label: 'Today', icon: '◉', component: TodayPage },
+  archive: { label: 'Archive', icon: '◎', component: ArchivePage },
+  sources: { label: 'Sources', icon: '⊞', component: SourcesPage },
+  contribute: { label: 'Contribute', icon: '+', component: ContributePage },
+  themes: { label: 'Themes', icon: '◈', component: ThemesPage },
+  settings: { label: 'Settings', icon: '⊙', component: SettingsPage },
+};
+
+function App() {
+  const [page, setPage] = useState('today');
+  const Page = PAGES[page].component;
+
+  return (
+    <div className="app">
+      <div className="sidebar">
+        <div className="sidebar-header">
+          <div className="sidebar-logo">The Briefing</div>
+          <div className="sidebar-sub">Haas · Daily Podcast</div>
+        </div>
+        <nav className="sidebar-nav">
+          {Object.entries(PAGES).map(([key, { label, icon }]) => (
+            <div
+              key={key}
+              className={`nav-item ${page === key ? 'active' : ''}`}
+              onClick={() => setPage(key)}
+            >
+              <span className="nav-icon">{icon}</span>
+              {label}
+            </div>
+          ))}
+        </nav>
+        <div className="sidebar-footer">
+          Intimate Technology<br />
+          Social Impact Strategy
+        </div>
+      </div>
+      <main className="main">
+        <Page onNavigate={setPage} />
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
