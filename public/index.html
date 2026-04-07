@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Adam's Daily Research Pod</title>
+  <title>The Briefing</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -447,12 +447,26 @@ function TodayPage({ onNavigate }) {
   async function generate() {
     setGenerating(true);
     setError('');
-    setStatus('Searching the web for today\'s stories…');
+    setStatus('Starting generation…');
     try {
-      const data = await apiFetch('/api/episodes/generate', { method: 'POST', body: {} });
-      setStatus('');
-      setLatest({ ...data.episode, sources: data.sources });
-      await load();
+      await apiFetch('/api/episodes/generate', { method: 'POST', body: {} });
+      // Poll every 3s until done
+      let done = false;
+      while (!done) {
+        await new Promise(r => setTimeout(r, 3000));
+        const job = await apiFetch('/api/episodes/generate/status');
+        if (job.status === 'complete') {
+          done = true;
+          setStatus('');
+          await load();
+        } else if (job.status === 'error') {
+          done = true;
+          setError(job.error || 'Generation failed');
+          setStatus('');
+        } else {
+          setStatus(job.step || 'Working…');
+        }
+      }
     } catch (e) {
       setError(e.message);
       setStatus('');
@@ -1103,7 +1117,8 @@ function App() {
     <div className="app">
       <div className="sidebar">
         <div className="sidebar-header">
-          <div className="sidebar-logo">Adam's Daily Research Pod</div>
+          <div className="sidebar-logo">The Briefing</div>
+          <div className="sidebar-sub">Haas · Daily Podcast</div>
         </div>
         <nav className="sidebar-nav">
           {Object.entries(PAGES).map(([key, { label, icon }]) => (
