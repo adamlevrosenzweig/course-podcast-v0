@@ -864,7 +864,7 @@ function ArchivePage() {
 
 // ── SOURCES PAGE ─────────────────────────────────────────────────────────────
 
-function getFromDate(Range) {
+function getFromDate(range) {
   if (!range) return null;
   const d = new Date();
   if (range === '7d')  d.setDate(d.getDate() - 7);
