@@ -210,8 +210,12 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 Sources for today:
 ${sourcesForScript}
 
-Return only the script text. No stage directions, no metadata.`;
+Return a JSON object with exactly two fields:
+- "title": a short, punchy 4-7 word title capturing today's central theme (no quotes, no episode number)
+- "script": the full podcast script text
 
+Example format:
+{"title": "When Convenience Becomes Surveillance", "script": "Adam, a quick one today..."}\`;
       const scriptResponse = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 4000,
