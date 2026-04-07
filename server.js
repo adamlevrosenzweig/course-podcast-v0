@@ -261,6 +261,17 @@ Return only the script text. No stage directions, no metadata.`;
 
 // ─── AUDIO GENERATION ────────────────────────────────────────────────────────
 
+// In-memory job store for audio generation (same pattern as episode generation)
+const audioJobs = {};
+
+app.get('/api/episodes/:id/audio/status', (req, res) => {
+  const job = Object.values(audioJobs)
+    .filter(j => j.episodeId === req.params.id)
+    .sort((a, b) => b.startedAt - a.startedAt)[0];
+  if (!job) return res.json({ status: 'idle' });
+  res.json(job);
+});
+
 app.post('/api/episodes/:id/audio', async (req, res) => {
   if (!ELEVENLABS_API_KEY) return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
   if (!ELEVENLABS_VOICE_ID) return res.status(500).json({ error: 'ELEVENLABS_VOICE_ID not configured' });
@@ -269,42 +280,51 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
   if (!episode) return res.status(404).json({ error: 'Episode not found' });
   if (!episode.script) return res.status(400).json({ error: 'Episode has no script' });
 
-  try {
-    const audioFilename = `episode-${episode.number}-${episode.date}.mp3`;
-    const audioPath = path.join(AUDIO_DIR, audioFilename);
+  // If already running for this episode, return current job
+  const running = Object.values(audioJobs).find(j => j.episodeId === req.params.id && j.status === 'running');
+  if (running) return res.json({ status: 'running', jobId: running.jobId });
 
-    const response = await axios.post(
-      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
-      {
-        text: episode.script,
-        model_id: 'eleven_turbo_v2_5',
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          style: 0.3,
-          use_speaker_boost: true
-        }
-      },
-      {
-        headers: {
-          'xi-api-key': ELEVENLABS_API_KEY,
-          'Content-Type': 'application/json',
-          'Accept': 'audio/mpeg'
+  const jobId = Date.now().toString();
+  audioJobs[jobId] = { jobId, episodeId: req.params.id, status: 'running', step: 'Connecting to ElevenLabs...', startedAt: Date.now() };
+
+  // Return immediately — client polls /api/episodes/:id/audio/status
+  res.json({ status: 'started', jobId });
+
+  (async () => {
+    const job = audioJobs[jobId];
+    try {
+      const audioFilename = `episode-${episode.number}-${episode.date}.mp3`;
+      const audioPath = path.join(AUDIO_DIR, audioFilename);
+
+      job.step = 'Generating audio with ElevenLabs...';
+      const response = await axios.post(
+        `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+        {
+          text: episode.script,
+          model_id: 'eleven_turbo_v2_5',
+          voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true }
         },
-        responseType: 'arraybuffer',
-        timeout: 120000
-      }
-    );
+        {
+          headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
+          responseType: 'arraybuffer',
+          timeout: 300000  // 5 min — Railway proxy is bypassed since we returned already
+        }
+      );
 
-    fs.writeFileSync(audioPath, response.data);
-    db.prepare('UPDATE episodes SET audio_filename = ? WHERE id = ?').run(audioFilename, episode.id);
+      job.step = 'Saving audio file...';
+      fs.writeFileSync(audioPath, response.data);
+      db.prepare('UPDATE episodes SET audio_filename = ? WHERE id = ?').run(audioFilename, episode.id);
 
-    res.json({ audio_url: `/audio/${audioFilename}`, filename: audioFilename });
-
-  } catch (err) {
-    console.error('Audio generation error:', err.response?.data || err.message);
-    res.status(500).json({ error: err.response?.data?.detail?.message || err.message });
-  }
+      job.status = 'complete';
+      job.step = 'Done';
+      job.audio_url = `/audio/${audioFilename}`;
+      job.filename = audioFilename;
+    } catch (err) {
+      console.error('Audio generation error:', err.response?.data || err.message);
+      job.status = 'error';
+      job.error = err.response?.data?.detail?.message || err.message;
+    }
+  })();
 });
 
 // ─── SOURCES ─────────────────────────────────────────────────────────────────
@@ -443,3 +463,4 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Podcast Briefing server running on port ${PORT}`);
 });
+
