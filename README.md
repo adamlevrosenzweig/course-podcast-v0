@@ -1,7 +1,7 @@
 # Course Podcast Briefing
 
 A daily AI-generated podcast briefing for two UC Berkeley Haas courses:
-- **Intimate Technology** (UGBA) — how technology mediates human intimacy, vulnerability, and connection
+- **Intimate Technology** (UGBA [TBD]) — how technology mediates human intimacy, vulnerability, and connection
 - **Social Impact Strategy in Commercial Tech** (MBA 290T) — how commercial tech companies navigate social impact
 
 ## What it does
