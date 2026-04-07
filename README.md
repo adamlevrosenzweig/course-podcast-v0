@@ -20,6 +20,7 @@ You can also contribute specific URLs to include in the next episode.
 - **AI**: Anthropic API (`claude-sonnet-4-20250514`) with `web_search_20250305` tool
 - **Audio**: ElevenLabs text-to-speech API
 - **Frontend**: React (CDN), Tailwind (CDN) — no build step
+- **Scheduling**: node-cron (daily auto-generation)
 - **Hosting**: Railway
 
 ## Pages
@@ -47,6 +48,7 @@ BASE_URL=https://course-podcast-v0-production.up.railway.app
 PORT=3000
 DATA_DIR=/data
 AUDIO_DIR=/data/audio
+CRON_SCHEDULE=0 7 * * *
 ```
 
 ### Persistent storage (required — do this once)
@@ -84,6 +86,26 @@ The fix: both operations use a **background job + polling** pattern:
 2. The actual work runs in the background on the server
 3. The UI polls for status every 3 seconds and shows live progress ("Searching for sources…", "Generating audio with ElevenLabs…")
 4. When the job completes, the UI updates automatically
+
+
+## Automatic daily generation
+
+The app auto-generates a new episode every day at **7:00 AM Pacific time** using a built-in cron job. No manual action needed — open the app in the morning and the episode will already be there (or generating).
+
+The cron job skips generation if an episode already exists for that day, so manually generating won't cause duplicates.
+
+**To change the schedule**, set a `CRON_SCHEDULE` environment variable in the Railway dashboard using standard cron syntax:
+
+| Schedule | Value |
+|----------|-------|
+| 6 AM PT daily | `0 6 * * *` |
+| 7 AM PT daily (default) | `0 7 * * *` |
+| 8 AM PT daily | `0 8 * * *` |
+| Weekdays only at 7 AM | `0 7 * * 1-5` |
+
+The timezone is locked to `America/Los_Angeles` in code, so it adjusts automatically for PST/PDT.
+
+To verify it's running, check the Railway logs — you'll see a `[cron]` line at the scheduled time.
 
 ## Editing the app over time
 
