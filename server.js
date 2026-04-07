@@ -141,8 +141,15 @@ app.post('/api/episodes/generate', async (req, res) => {
 
 2. **Social Impact Strategy in Commercial Tech** (MBA 290T): Explores how commercial technology companies navigate social impact. Key themes include corporate responsibility, ESG and tech, algorithmic harm, technology policy, ethical product design, stakeholder capitalism, social entrepreneurship in tech, the tension between growth and social good.
 
-Search the web for the 8–12 most important, recent, high-quality stories and articles published in the last 7 days relevant to these topic themes:
+Search the web for the 8–12 most important, recent stories and articles published in the last 7 days relevant to these topic themes.
 
+Source quality requirements — strictly apply these:
+- PREFER: established news outlets (NYT, Washington Post, The Guardian, The Atlantic, Wired, Bloomberg, Reuters, AP), academic and research publications (Nature, Science, SSRN preprints, university press releases from R1 institutions), and specialist tech/policy outlets (MIT Technology Review, IEEE Spectrum, rest of world, Politico, The Markup, Slate, The Verge for substantive pieces)
+- PREFER: articles with a named author or byline
+- AVOID: sites without clear author attribution, content farms, SEO aggregators, press-release republishers, sites with excessive advertising, AI-generated content sites
+- AVOID: product announcements or marketing copy disguised as news
+- AVOID: low-domain-authority blogs or sites you've never heard of
+- If a story is only covered by low-quality sources, skip it — wait for a credible outlet to cover it
 ${themeList}${contributedSection}
 
 For each source found, provide a JSON object with:
