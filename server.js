@@ -131,9 +131,25 @@ app.post('/api/episodes/generate', async (req, res) => {
       // Step 1: Discover sources
       job.step = 'Searching for sources...';
       const themeList = themes.map(t => `- ${t.name} (${t.course.replace('_', ' ')})`).join('\n');
-      const contributedSection = pendingUrls.length > 0
-        ? `\n\nThe following URLs have been manually contributed and MUST be included as sources:\n${pendingUrls.map(u => `- ${u.url}${u.note ? ` (note: ${u.note})` : ''}`).join('\n')}`
-        : '';
+   const contributedSection = pendingUrls.length > 0
+  ? `\n\nThe following URLs have been manually contributed and MUST be included as sources:\n${pendingUrls.map(u => `- ${u.url}${u.note ? ` (note: ${u.note})` : ''}`).join('\n')}`
+  : '';
+
+const recentFeedback = db.prepare(`
+  SELECT f.note, s.title as source_title, s.url as source_url
+  FROM feedback f
+  LEFT JOIN sources s ON s.id = f.source_id
+  ORDER BY f.created_at DESC
+  LIMIT 20
+`).all();
+
+const feedbackSection = recentFeedback.length > 0
+  ? `\n\nRecent listener feedback to inform your source selection:\n${recentFeedback.map(f =>
+      f.source_title
+        ? `- Re "${f.source_title}" (${f.source_url}): "${f.note}"`
+        : `- General note: "${f.note}"`
+    ).join('\n')}`
+  : '';
 
       const discoveryPrompt = `You are a research assistant for a UC Berkeley professor who teaches two courses:
 
@@ -150,7 +166,7 @@ Source quality requirements — strictly apply these:
 - AVOID: product announcements or marketing copy disguised as news
 - AVOID: low-domain-authority blogs or sites you've never heard of
 - If a story is only covered by low-quality sources, skip it — wait for a credible outlet to cover it
-${themeList}${contributedSection}
+${themeList}${contributedSection}${feedbackSection}
 
 For each source found, provide a JSON object with:
 - title: article/story title
