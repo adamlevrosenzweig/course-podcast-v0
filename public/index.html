@@ -633,9 +633,11 @@ function TodayPage({ onNavigate }) {
       {latest && !generating && (
         <>
           <div className="card">
-            <div className="card-meta">Episode {latest.number} · {latest.date} · ~{latest.duration_estimate} min</div>
-            <div className="card-title" style={{marginBottom: '14px'}}>
-              {latest.source_count} sources · {latest.audio_filename ? 'Audio ready' : 'Script ready'}
+            <div className="card-title" style={{marginBottom: '6px'}}>
+              {latest.title || `Episode ${latest.number} · ${latest.date}`}
+            </div>
+            <div className="card-meta" style={{marginBottom: '14px'}}>
+              {latest.source_count} sources · ~{latest.duration_estimate} min · {latest.audio_filename ? 'Audio ready' : 'Script ready'}
             </div>
 
             {latest.audio_filename ? (
@@ -754,7 +756,7 @@ function SourceCard({ source }) {
       <div className="source-footer">
         <CourseTag courses={courses} />
         {source.contributed === 1 && <span className="tag tag-contributed">Contributed</span>}
-        {source.episode_number && <span style={{fontSize: '11px', color: 'var(--text-muted)'}}>Ep. {source.episode_number}</span>}
+        {source.episode_number && <span style={{fontSize: '11px', color: 'var(--text-muted)'}}>#{source.episode_number}</span>}
         {source.published_date && <span style={{fontSize: '11px', color: 'var(--text-muted)'}}>{source.published_date}</span>}
         <button
           className="btn btn-ghost btn-sm"
@@ -828,7 +830,7 @@ function ArchivePage() {
       {episodes.map(ep => (
         <div key={ep.id} className="ep-item" onClick={() => selectEp(ep)}>
           <span className="ep-num">#{ep.number}</span>
-          <span className="ep-title">{ep.date}</span>
+          <span className="ep-title">{ep.title || ep.date}</span>
           <span className="ep-meta">{ep.source_count} sources · ~{ep.duration_estimate} min</span>
         </div>
       ))}
