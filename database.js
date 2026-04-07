@@ -16,6 +16,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     number INTEGER UNIQUE,
     date TEXT NOT NULL,
+    title TEXT,
     script TEXT,
     audio_filename TEXT,
     duration_estimate INTEGER,
@@ -65,6 +66,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_feedback_source ON feedback(source_id);
   CREATE INDEX IF NOT EXISTS idx_feedback_episode ON feedback(episode_id);
 `);
+
+// Migrate existing deployments — add title column if missing
+try { db.exec('ALTER TABLE episodes ADD COLUMN title TEXT'); } catch (_) {}
 
 // Seed default themes if empty
 const themeCount = db.prepare('SELECT COUNT(*) as c FROM themes').get();
