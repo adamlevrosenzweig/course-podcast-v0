@@ -14,7 +14,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '';
 
-const AUDIO_DIR = path.join(__dirname, 'audio');
+const AUDIO_DIR = process.env.AUDIO_DIR || path.join(__dirname, 'audio');
 if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
 app.use(cors());
@@ -463,4 +463,5 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Podcast Briefing server running on port ${PORT}`);
 });
+
 
