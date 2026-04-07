@@ -217,15 +217,36 @@ Return only the script text. No stage directions, no metadata.`;
         max_tokens: 4000,
         messages: [{ role: 'user', content: scriptPrompt }]
       });
-      const script = scriptResponse.content[0].text;
+      const rawResponse = scriptResponse.content[0].text.trim();
+      let script, episodeTitle;
+      try {
+        // Strip markdown fences if Claude wrapped it anyway
+        const jsonText = rawResponse.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+        const parsed = JSON.parse(jsonText);
+        script = parsed.script || rawResponse;
+        episodeTitle = parsed.title || '';
+      } catch (_) {
+        // Fallback: treat whole response as script
+        script = rawResponse;
+        episodeTitle = '';
+      }
+
+      // Format: "#12 · Some Pithy Title · April 6, 2026"
+      const dateFormatted = new Date(today + 'T12:00:00').toLocaleDateString('en-US', {
+        month: 'long', day: 'numeric', year: 'numeric'
+      });
+      const fullTitle = episodeTitle
+        ? `#${episodeNumber} · ${episodeTitle} · ${dateFormatted}`
+        : `#${episodeNumber} · ${dateFormatted}`;
+
       const wordCount = script.split(/\s+/).length;
       const durationEstimate = Math.round(wordCount / 150);
 
       // Step 3: Save to DB
       job.step = 'Saving episode...';
       const epResult = db.prepare(
-        'INSERT INTO episodes (number, date, script, duration_estimate) VALUES (?, ?, ?, ?)'
-      ).run(episodeNumber, today, script, durationEstimate);
+        'INSERT INTO episodes (number, date, title, script, duration_estimate) VALUES (?, ?, ?, ?, ?)'
+      ).run(episodeNumber, today, fullTitle, script, durationEstimate);
       const episodeId = epResult.lastInsertRowid;
 
       const insertSource = db.prepare(
@@ -421,7 +442,7 @@ app.get('/feed.xml', (req, res) => {
     const description = escXml(ep.script ? ep.script.substring(0, 300) + '...' : `Episode ${ep.number}`);
     return `
     <item>
-      <title>Episode ${ep.number} – ${escXml(ep.date)}</title>
+      <title>${escXml(ep.title || `Episode ${ep.number} – ${ep.date}`)}</title>
       <description>${description}</description>
       <pubDate>${pubDate}</pubDate>
       <enclosure url="${audioUrl}" length="${audioSize}" type="audio/mpeg"/>
