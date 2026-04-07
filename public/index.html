@@ -729,12 +729,20 @@ function TodayPage({ onNavigate }) {
 
 // ── SOURCE CARD ─────────────────────────────────────────────────────────────
 
+function getOutlet(url) {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch { return null; }
+}
+
 function SourceCard({ source }) {
   const [showFb, setShowFb] = useState(false);
   const [note, setNote] = useState('');
   const [saved, setSaved] = useState(false);
 
   const courses = typeof source.courses === 'string' ? JSON.parse(source.courses) : (source.courses || []);
+  const outlet = getOutlet(source.url);
 
   async function saveFeedback(e) {
     e.preventDefault();
@@ -749,15 +757,31 @@ function SourceCard({ source }) {
 
   return (
     <div className="source-item">
+      {outlet && (
+        <div style={{fontSize:'11px', color:'var(--text-muted)', marginBottom:'4px', textTransform:'uppercase', letterSpacing:'0.06em', fontWeight:600}}>
+          {outlet}
+        </div>
+      )}
       <div className="source-title">
         {source.url ? <a href={source.url} target="_blank" rel="noopener">{source.title}</a> : source.title}
       </div>
       {source.summary && <div className="source-summary">{source.summary}</div>}
+      {(outlet || source.published_date || source.url) && (
+        <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'8px', marginBottom:'4px', lineHeight:'1.5'}}>
+          <span style={{fontStyle:'italic'}}>
+            {[outlet, source.published_date].filter(Boolean).join(' · ')}
+          </span>
+          {source.url && (
+            <span> · <a href={source.url} target="_blank" rel="noopener" style={{color:'var(--text-muted)', wordBreak:'break-all'}}>
+              {source.url.length > 70 ? source.url.slice(0, 70) + '…' : source.url}
+            </a></span>
+          )}
+        </div>
+      )}
       <div className="source-footer">
         <CourseTag courses={courses} />
         {source.contributed === 1 && <span className="tag tag-contributed">Contributed</span>}
-        {source.episode_number && <span style={{fontSize: '11px', color: 'var(--text-muted)'}}>#{source.episode_number}</span>}
-        {source.published_date && <span style={{fontSize: '11px', color: 'var(--text-muted)'}}>{source.published_date}</span>}
+        {source.episode_number && <span style={{fontSize: '11px', color: 'var(--text-muted)'}}>Ep. {source.episode_number}</span>}
         <button
           className="btn btn-ghost btn-sm"
           style={{marginLeft: 'auto', fontSize: '11px', padding: '3px 8px'}}
