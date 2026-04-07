@@ -45,7 +45,22 @@ ELEVENLABS_API_KEY=...
 ELEVENLABS_VOICE_ID=E393dkE75hqtz1LO2aEJ
 BASE_URL=https://course-podcast-v0-production.up.railway.app
 PORT=3000
+DATA_DIR=/data
+AUDIO_DIR=/data/audio
 ```
+
+### Persistent storage (required — do this once)
+
+By default Railway's filesystem resets on every deploy, wiping the database and audio files. To make data persist, you need to add a **Railway Volume**:
+
+1. Go to [railway.app](https://railway.app) → your project → your service
+2. Click **+ Add Volume** (in the service settings, under the "Volumes" section)
+3. Set **Mount Path** to `/data`
+4. Click **Add**
+5. In the service **Variables** tab, add (or confirm):
+   - `DATA_DIR` = `/data`
+   - `AUDIO_DIR` = `/data/audio`
+6. Railway will redeploy. After this, episodes and audio survive restarts and redeploys.
 
 ### Local development
 
@@ -53,7 +68,7 @@ PORT=3000
 git clone https://github.com/adamlevrosenzweig/course-podcast-v0
 cd course-podcast-v0
 npm install
-cp .env.example .env   # fill in your API keys
+cp .env.example .env   # fill in API keys; leave DATA_DIR/AUDIO_DIR unset for local defaults
 node --no-warnings server.js
 ```
 
@@ -69,8 +84,6 @@ The fix: both operations use a **background job + polling** pattern:
 2. The actual work runs in the background on the server
 3. The UI polls for status every 3 seconds and shows live progress ("Searching for sources…", "Generating audio with ElevenLabs…")
 4. When the job completes, the UI updates automatically
-
-This is why the buttons show a status message rather than just spinning — and why they'll keep working even for very long episodes.
 
 ## Editing the app over time
 
