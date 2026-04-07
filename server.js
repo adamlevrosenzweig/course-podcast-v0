@@ -136,7 +136,7 @@ app.post('/api/episodes/generate', async (req, res) => {
 
       const discoveryPrompt = `You are a research assistant for a UC Berkeley professor who teaches two courses:
 
-1. **Intimate Technology** (UGBA, Haas): Explores how technology mediates human intimacy, vulnerability, and connection. Key themes include AI companions, surveillance capitalism, haptic technology, digital intimacy, consent and data, companion robots, policy and regulation of intimate tech, ethics of consequence-free caregiving, identity performance and networked life.
+1. **Intimate Technology** (an undergrad business course): Explores how technology mediates human intimacy, vulnerability, and connection. Key themes include AI companions, surveillance capitalism, haptic technology, digital intimacy, consent and data, companion robots, policy and regulation of intimate tech, ethics of consequence-free caregiving, identity performance and networked life.
 
 2. **Social Impact Strategy in Commercial Tech** (MBA 290T): Explores how commercial technology companies navigate social impact. Key themes include corporate responsibility, ESG and tech, algorithmic harm, technology policy, ethical product design, stakeholder capitalism, social entrepreneurship in tech, the tension between growth and social good.
 
@@ -196,14 +196,15 @@ Return ONLY a valid JSON array of source objects. No other text.`;
 Both courses share territory: how technology affects vulnerable populations, how business models shape social outcomes, and where ethics and commercial incentives collide.
 
 Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today}) using the following sources. The script should:
-- Be 5–10 minutes when read aloud (~800–1,500 words)
+- Be 10-50 minutes when read aloud
 - Sound like a well-produced, intelligent daily briefing — natural spoken voice, not a list of summaries
+- Don't be afraid to be academic in your language - Adam values precision and abhors platitudes
 - Have a clear narrative thread that weaves stories together, especially where they span both courses
 - Explicitly name the conceptual connections between stories when relevant
 - Open with a brief orienting sentence about today's themes, not a generic intro
 - Close with a brief forward-looking thought or question to sit with
 - Reference sources naturally by name/outlet, not by number
-- NOT start with "Welcome" or "Hello" — just open in medias res with the content
+- NOT start with "Welcome" or "Hello" — just open with a quick, clever greeting directly to Adam, then in medias res get on with the content
 
 Sources for today:
 ${sourcesForScript}
