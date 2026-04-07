@@ -363,7 +363,7 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
 // ─── SOURCES ─────────────────────────────────────────────────────────────────
 
 app.get('/api/sources', (req, res) => {
-  const { q, course, episode_id } = req.query;
+ const { q, course, episode_id, from_date } = req.query;
   let query = 'SELECT s.*, e.number as episode_number, e.date as episode_date FROM sources s LEFT JOIN episodes e ON e.id = s.episode_id WHERE 1=1';
   const params = [];
 
@@ -375,12 +375,16 @@ app.get('/api/sources', (req, res) => {
     query += ' AND s.courses LIKE ?';
     params.push(`%${course}%`);
   }
-  if (episode_id) {
+if (episode_id) {
     query += ' AND s.episode_id = ?';
     params.push(episode_id);
   }
+  if (from_date) {
+    query += ' AND s.published_date >= ?';
+    params.push(from_date);
+  }
 
-  query += ' ORDER BY s.created_at DESC';
+  query += ' ORDER BY s.published_date DESC, s.created_at DESC';
   const sources = db.prepare(query).all(...params);
 
   // Parse courses JSON for each source
