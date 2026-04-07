@@ -424,6 +424,8 @@ app.get('/feed.xml', (req, res) => {
     <itunes:author>Adam Rosenzweig</itunes:author>
     <itunes:email>adam.lev.rosenzweig@gmail.com</itunes:email>
     <itunes:category text="Education"/>
+    <itunes:image href="${BASE_URL}/podcast_cover.png"/>
+    <image><url>${BASE_URL}/podcast_cover.png</url><title>Course Briefing</title><link>${BASE_URL}</link></image>
     <itunes:explicit>false</itunes:explicit>
     <itunes:type>episodic</itunes:type>
     ${items}
