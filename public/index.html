@@ -864,10 +864,20 @@ function ArchivePage() {
 
 // ── SOURCES PAGE ─────────────────────────────────────────────────────────────
 
+function getFromDate(range) {
+  if (!range) return null;
+  const d = new Date();
+  if (range === '7d')  d.setDate(d.getDate() - 7);
+  if (range === '30d') d.setDate(d.getDate() - 30);
+  if (range === '90d') d.setDate(d.getDate() - 90);
+  return d.toISOString().slice(0, 10);
+}
+
 function SourcesPage() {
   const [sources, setSources] = useState([]);
   const [q, setQ] = useState('');
   const [course, setCourse] = useState('');
+  const [dateRange, setDateRange] = useState('');
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -875,10 +885,12 @@ function SourcesPage() {
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (course) params.set('course', course);
+    const fromDate = getFromDate(dateRange);
+    if (fromDate) params.set('from_date', fromDate);
     const data = await apiFetch(`/api/sources?${params}`);
     setSources(data);
     setLoading(false);
-  }, [q, course]);
+  }, [q, course, dateRange]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -901,6 +913,12 @@ function SourcesPage() {
           <option value="">All courses</option>
           <option value="intimate_tech">Intimate Technology</option>
           <option value="social_impact">Social Impact Strategy</option>
+        </select>
+        <select value={dateRange} onChange={e => setDateRange(e.target.value)} style={{width:'150px'}}>
+          <option value="">All time</option>
+          <option value="7d">Last 7 days</option>
+          <option value="30d">Last 30 days</option>
+          <option value="90d">Last 90 days</option>
         </select>
       </div>
 
