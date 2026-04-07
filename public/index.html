@@ -375,10 +375,83 @@
     .step-dot.active { background: var(--accent); box-shadow: 0 0 6px rgba(200,169,110,0.4); }
     .step-dot.done { background: var(--impact); }
 
-    @media (max-width: 768px) {
-      .sidebar { width: 100%; height: auto; position: relative; }
-      .main { margin-left: 0; padding: 24px; }
+    /* ── Mobile bottom nav (hidden on desktop) ── */
+    .mobile-nav { display: none; }
+
+    @media (max-width: 680px) {
+      /* Hide sidebar, show bottom nav instead */
+      .sidebar { display: none; }
+
+      .mobile-nav {
+        display: flex;
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        z-index: 100;
+        padding-bottom: env(safe-area-inset-bottom, 0);
+      }
+      .mobile-nav-item {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 2px 6px;
+        font-size: 10px;
+        letter-spacing: 0.02em;
+        color: var(--text-muted);
+        cursor: pointer;
+        min-height: 52px;
+        gap: 3px;
+        transition: color 0.15s;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .mobile-nav-item.active { color: var(--accent); }
+      .mobile-nav-icon { font-size: 17px; line-height: 1; }
+
+      /* Main content */
+      .main {
+        margin-left: 0;
+        padding: 20px 16px 76px; /* bottom pad clears the nav bar */
+        max-width: 100%;
+      }
+
+      /* Typography */
+      .page-title { font-size: 22px; margin-bottom: 4px; }
+      .page-subtitle { margin-bottom: 24px; }
+
+      /* Cards */
+      .card { padding: 16px; }
+
+      /* Bigger touch targets on buttons */
+      .btn { padding: 11px 16px; min-height: 44px; }
+      .btn-sm { min-height: 36px; padding: 7px 12px; }
+
+      /* Generate hero */
+      .generate-hero { padding: 24px 16px; }
+      .generate-hero-title { font-size: 20px; }
+
+      /* Source items: tighter */
+      .source-item { padding: 12px; }
+
+      /* Theme grid: single column */
       .theme-grid { grid-template-columns: 1fr; }
+
+      /* Episode list: hide number, show as simpler rows */
+      .ep-num { display: none; }
+
+      /* Audio actions: wrap on small screens */
+      .audio-actions { flex-wrap: wrap; }
+
+      /* Script text: smaller padding */
+      .script-text { padding: 16px; font-size: 14px; }
+
+      /* Inputs: bigger tap targets */
+      input[type="text"], input[type="url"], textarea, select {
+        padding: 11px 12px;
+        font-size: 16px; /* prevents iOS zoom on focus */
+      }
     }
   </style>
 </head>
@@ -1127,6 +1200,15 @@ function App() {
   const [page, setPage] = useState('today');
   const Page = PAGES[page].component;
 
+  const MOBILE_PAGES = [
+    ['today',      'Today',   '◉'],
+    ['archive',    'Archive', '◎'],
+    ['sources',    'Sources', '⊞'],
+    ['contribute', 'Add',     '+'],
+    ['themes',     'Themes',  '◈'],
+    ['settings',   'More',    '⊙'],
+  ];
+
   return (
     <div className="app">
       <div className="sidebar">
@@ -1154,6 +1236,18 @@ function App() {
       <main className="main">
         <Page onNavigate={setPage} />
       </main>
+      <nav className="mobile-nav">
+        {MOBILE_PAGES.map(([key, label, icon]) => (
+          <div
+            key={key}
+            className={`mobile-nav-item ${page === key ? 'active' : ''}`}
+            onClick={() => setPage(key)}
+          >
+            <span className="mobile-nav-icon">{icon}</span>
+            <span>{label}</span>
+          </div>
+        ))}
+      </nav>
     </div>
   );
 }
