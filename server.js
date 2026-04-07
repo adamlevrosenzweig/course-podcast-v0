@@ -6,6 +6,7 @@ const fs = require('fs');
 const axios = require('axios');
 const Anthropic = require('@anthropic-ai/sdk');
 const db = require('./database');
+const cron = require('node-cron');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -459,6 +460,43 @@ app.get('/feed.xml', (req, res) => {
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+
+// ─── DAILY AUTO-GENERATION ───────────────────────────────────────────────────
+// Runs every day at 7:00 AM Pacific time (UTC-7 in PDT, UTC-8 in PST).
+// node-cron schedules in server local time (UTC on Railway), so we use UTC hours:
+//   7 AM PT (PDT, UTC-7) = 14:00 UTC  |  7 AM PT (PST, UTC-8) = 15:00 UTC
+// To handle both, check the TZ env var or just pick a UTC hour.
+// Railway runs in UTC. To change the time, update CRON_SCHEDULE in env vars.
+// Default: "0 14 * * *"  = 7 AM PDT (summer).  Use "0 15 * * *" in winter.
+
+const CRON_SCHEDULE = process.env.CRON_SCHEDULE || '0 14 * * *';
+
+cron.schedule(CRON_SCHEDULE, async () => {
+  console.log('[cron] Starting scheduled daily generation at', new Date().toISOString());
+
+  // Skip if already generated today
+  const today = new Date().toISOString().split('T')[0];
+  const existing = db.prepare('SELECT id FROM episodes WHERE date = ?').get(today);
+  if (existing) {
+    console.log('[cron] Episode already exists for today, skipping.');
+    return;
+  }
+
+  // Reuse the same generation logic as the POST endpoint
+  // by making an internal HTTP request to ourselves
+  const port = process.env.PORT || 3000;
+  try {
+    const res = await axios.post(`http://localhost:${port}/api/episodes/generate`, {});
+    console.log('[cron] Generation job started:', res.data.jobId || res.data.status);
+  } catch (err) {
+    console.error('[cron] Failed to start generation:', err.message);
+  }
+}, {
+  timezone: 'America/Los_Angeles'  // handles DST automatically
+});
+
+console.log(`[cron] Daily generation scheduled: ${CRON_SCHEDULE} (America/Los_Angeles)`);
 
 app.listen(PORT, () => {
   console.log(`Podcast Briefing server running on port ${PORT}`);
