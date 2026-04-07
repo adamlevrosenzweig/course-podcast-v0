@@ -378,6 +378,62 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+// ─── RSS FEED (Apple Podcasts compatible) ────────────────────────────────────
+
+app.get('/feed.xml', (req, res) => {
+  const BASE_URL = process.env.BASE_URL || `https://${req.headers.host}`;
+  const episodes = db.prepare(`
+    SELECT * FROM episodes WHERE audio_filename IS NOT NULL ORDER BY number DESC
+  `).all();
+
+  const escXml = (str = '') => str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  const items = episodes.map(ep => {
+    const audioUrl = `${BASE_URL}/audio/${ep.audio_filename}`;
+    const audioPath = path.join(AUDIO_DIR, ep.audio_filename);
+    const audioSize = fs.existsSync(audioPath) ? fs.statSync(audioPath).size : 0;
+    const pubDate = new Date(ep.date).toUTCString();
+    const duration = ep.duration_estimate ? `${ep.duration_estimate}:00` : '0:00';
+    const description = escXml(ep.script ? ep.script.substring(0, 300) + '...' : `Episode ${ep.number}`);
+    return `
+    <item>
+      <title>Episode ${ep.number} – ${escXml(ep.date)}</title>
+      <description>${description}</description>
+      <pubDate>${pubDate}</pubDate>
+      <enclosure url="${audioUrl}" length="${audioSize}" type="audio/mpeg"/>
+      <guid isPermaLink="false">${BASE_URL}/episodes/${ep.id}</guid>
+      <itunes:duration>${duration}</itunes:duration>
+      <itunes:episode>${ep.number}</itunes:episode>
+      <itunes:episodeType>full</itunes:episodeType>
+    </item>`;
+  }).join('');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+  xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+  xmlns:content="http://purl.org/rss/modules/content/">
+  <channel>
+    <title>Course Briefing – Adam Rosenzweig</title>
+    <description>Daily AI-generated briefings for Intimate Technology and Social Impact Strategy in Commercial Tech at UC Berkeley Haas.</description>
+    <link>${BASE_URL}</link>
+    <language>en-us</language>
+    <itunes:author>Adam Rosenzweig</itunes:author>
+    <itunes:email>adam.lev.rosenzweig@gmail.com</itunes:email>
+    <itunes:category text="Education"/>
+    <itunes:explicit>false</itunes:explicit>
+    <itunes:type>episodic</itunes:type>
+    ${items}
+  </channel>
+</rss>`;
+
+  res.set('Content-Type', 'application/rss+xml');
+  res.send(xml);
+});
+
 // ─── CATCH-ALL ───────────────────────────────────────────────────────────────
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
