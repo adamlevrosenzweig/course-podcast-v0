@@ -58,13 +58,77 @@ node --no-warnings server.js
 
 Requires Node 22.5+.
 
-## Making changes
+## Editing the app over time
 
-**To edit the frontend** (`public/index.html`): edit the file in GitHub → Railway redeploys automatically in ~1 min.
+All logic lives in two files: `server.js` (backend) and `public/index.html` (frontend). You can edit either directly in GitHub — no local setup needed. Railway picks up the change and redeploys automatically in about 60 seconds.
 
-**To add API routes** (`server.js`): same — edit in GitHub, auto-redeploy.
+**To edit a file in GitHub:**
+1. Open the file on GitHub (e.g. `server.js`)
+2. Click the pencil icon (Edit this file) in the top right
+3. Make your changes
+4. Click **Commit changes** → add a short message → **Commit directly to main**
+5. Railway redeploys automatically — check the Railway dashboard to confirm
 
-**To add themes**: use the Themes page in the app, or POST to `/api/themes`.
+---
+
+### Changing episode length or style
+
+The episode script is controlled by `scriptPrompt` in `server.js`. Find this block:
+
+```js
+const scriptPrompt = `You are the host of a daily podcast briefing...
+...Be 5–10 minutes when read aloud (~800–1,500 words)...`;
+```
+
+Examples of what you can change:
+
+| Goal | What to edit |
+|------|-------------|
+| Longer episodes | Change `5–10 minutes` → `12–15 minutes (~2,000–2,500 words)` |
+| More academic tone | Add: `Use a more analytical, lecture-style tone suitable for MBA students.` |
+| Focus on one course | Remove the other course from the prompt |
+| Add a recurring segment | Add: `End every episode with a "Question of the Day" for class discussion.` |
+
+---
+
+### Changing the courses covered
+
+The courses are defined near the top of `server.js`:
+
+```js
+const COURSES = [
+  { id: 1, name: "Intimate Technology", level: "undergrad" },
+  { id: 2, name: "Social Impact Strategy in Commercial Tech", level: "mba" }
+];
+```
+
+Edit the names, add a third course, or remove one entirely.
+
+---
+
+### Changing the voice
+
+Go to **Settings** in the app and select a different ElevenLabs voice, or update `ELEVENLABS_VOICE_ID` in the Railway environment variables dashboard directly.
+
+---
+
+### Changing what the frontend looks like
+
+`public/index.html` contains all the React UI. The layout, colors (Tailwind classes), tab names, and copy are all in that file. Edit and commit — changes appear after Railway redeploys.
+
+---
+
+### Apple Podcasts / RSS feed
+
+The app exposes a podcast RSS feed at:
+
+```
+https://course-podcast-v0-production.up.railway.app/feed.xml
+```
+
+To add it to Apple Podcasts: **File → Follow a Podcast… → paste the URL.**
+
+---
 
 ## API endpoints
 
@@ -72,9 +136,11 @@ Requires Node 22.5+.
 |--------|----------|-------------|
 | GET | `/api/episodes` | List all episodes |
 | POST | `/api/episodes/generate` | Generate today's episode (Anthropic + web search) |
+| GET | `/api/episodes/generate/status` | Poll background generation job status |
 | POST | `/api/episodes/:id/audio` | Generate audio for an episode (ElevenLabs) |
 | GET | `/api/sources` | Search all sources |
 | GET/POST | `/api/themes` | List or add themes |
 | POST | `/api/contributed` | Submit a URL |
 | GET | `/api/voices` | List ElevenLabs voices |
 | GET | `/api/config` | Check API key status |
+| GET | `/feed.xml` | Apple Podcasts–compatible RSS feed |
