@@ -1,0 +1,388 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+const axios = require('axios');
+const Anthropic = require('@anthropic-ai/sdk');
+const db = require('./database');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '';
+
+const AUDIO_DIR = path.join(__dirname, 'audio');
+if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
+
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/audio', express.static(AUDIO_DIR));
+
+// ─── THEMES ──────────────────────────────────────────────────────────────────
+
+app.get('/api/themes', (req, res) => {
+  const themes = db.prepare('SELECT * FROM themes ORDER BY course, name').all();
+  res.json(themes);
+});
+
+app.post('/api/themes', (req, res) => {
+  const { name, course } = req.body;
+  if (!name || !course) return res.status(400).json({ error: 'name and course required' });
+  const valid = ['intimate_tech', 'social_impact', 'shared'];
+  if (!valid.includes(course)) return res.status(400).json({ error: 'course must be intimate_tech, social_impact, or shared' });
+  const result = db.prepare('INSERT INTO themes (name, course, active) VALUES (?, ?, 1)').run(name, course);
+  res.json(db.prepare('SELECT * FROM themes WHERE id = ?').get(result.lastInsertRowid));
+});
+
+app.patch('/api/themes/:id', (req, res) => {
+  const { active, name } = req.body;
+  const theme = db.prepare('SELECT * FROM themes WHERE id = ?').get(req.params.id);
+  if (!theme) return res.status(404).json({ error: 'Not found' });
+  db.prepare('UPDATE themes SET active = COALESCE(?, active), name = COALESCE(?, name) WHERE id = ?')
+    .run(active !== undefined ? (active ? 1 : 0) : null, name || null, req.params.id);
+  res.json(db.prepare('SELECT * FROM themes WHERE id = ?').get(req.params.id));
+});
+
+app.delete('/api/themes/:id', (req, res) => {
+  db.prepare('DELETE FROM themes WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// ─── CONTRIBUTED URLS ────────────────────────────────────────────────────────
+
+app.get('/api/contributed', (req, res) => {
+  const urls = db.prepare('SELECT * FROM contributed_urls ORDER BY created_at DESC').all();
+  res.json(urls);
+});
+
+app.post('/api/contributed', (req, res) => {
+  const { url, note } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+  const result = db.prepare('INSERT INTO contributed_urls (url, note) VALUES (?, ?)').run(url, note || null);
+  res.json(db.prepare('SELECT * FROM contributed_urls WHERE id = ?').get(result.lastInsertRowid));
+});
+
+// ─── EPISODES ────────────────────────────────────────────────────────────────
+
+app.get('/api/episodes', (req, res) => {
+  const episodes = db.prepare(`
+    SELECT e.*, COUNT(s.id) as source_count
+    FROM episodes e
+    LEFT JOIN sources s ON s.episode_id = e.id
+    GROUP BY e.id
+    ORDER BY e.number DESC
+  `).all();
+  res.json(episodes);
+});
+
+app.get('/api/episodes/:id', (req, res) => {
+  const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+  if (!episode) return res.status(404).json({ error: 'Not found' });
+  const sources = db.prepare('SELECT * FROM sources WHERE episode_id = ? ORDER BY id').all(req.params.id);
+  const feedback = db.prepare('SELECT * FROM feedback WHERE episode_id = ? ORDER BY created_at').all(req.params.id);
+  res.json({ ...episode, sources, feedback });
+});
+
+// ─── EPISODE GENERATION ──────────────────────────────────────────────────────
+
+app.post('/api/episodes/generate', async (req, res) => {
+  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+  try {
+    const themes = db.prepare('SELECT * FROM themes WHERE active = 1').all();
+    if (themes.length === 0) return res.status(400).json({ error: 'No active themes configured' });
+
+    const pendingUrls = db.prepare('SELECT * FROM contributed_urls WHERE used = 0').all();
+
+    const lastEp = db.prepare('SELECT MAX(number) as n FROM episodes').get();
+    const episodeNumber = (lastEp.n || 0) + 1;
+    const today = new Date().toISOString().split('T')[0];
+
+    // Step 1: Discover sources via Anthropic with web search
+    res.setHeader('Content-Type', 'application/json');
+
+    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+
+    const themeList = themes.map(t => `- ${t.name} (${t.course.replace('_', ' ')})`).join('\n');
+    const contributedSection = pendingUrls.length > 0
+      ? `\n\nThe following URLs have been manually contributed and MUST be included as sources:\n${pendingUrls.map(u => `- ${u.url}${u.note ? ` (note: ${u.note})` : ''}`).join('\n')}`
+      : '';
+
+    const discoveryPrompt = `You are a research assistant for a UC Berkeley professor who teaches two courses:
+
+1. **Intimate Technology** (UGBA, Haas): Explores how technology mediates human intimacy, vulnerability, and connection. Key themes include AI companions, surveillance capitalism, haptic technology, digital intimacy, consent and data, companion robots, policy and regulation of intimate tech, ethics of consequence-free caregiving, identity performance and networked life.
+
+2. **Social Impact Strategy in Commercial Tech** (MBA 290T): Explores how commercial technology companies navigate social impact. Key themes include corporate responsibility, ESG and tech, algorithmic harm, technology policy, ethical product design, stakeholder capitalism, social entrepreneurship in tech, the tension between growth and social good.
+
+Search the web for the 8–12 most important, recent, high-quality stories and articles published in the last 7 days relevant to these topic themes:
+
+${themeList}${contributedSection}
+
+For each source found, provide a JSON object with:
+- title: article/story title
+- url: full URL
+- summary: 2–3 sentence summary of the key points
+- published_date: approximate date (YYYY-MM-DD format if known)
+- courses: array of applicable courses — use "intimate_tech", "social_impact", or both
+- contributed: boolean (true only if it was in the manually contributed URLs list)
+
+Return ONLY a valid JSON array of source objects. No other text.`;
+
+    let discoveredSources = [];
+
+    try {
+      const discoveryResponse = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 8000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{ role: 'user', content: discoveryPrompt }]
+      });
+
+      // Extract text content from response (may include tool use results)
+      let jsonText = '';
+      for (const block of discoveryResponse.content) {
+        if (block.type === 'text') {
+          jsonText += block.text;
+        }
+      }
+
+      // Parse JSON array from response
+      const jsonMatch = jsonText.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        discoveredSources = JSON.parse(jsonMatch[0]);
+      }
+    } catch (err) {
+      console.error('Discovery error:', err.message);
+      // Continue with empty sources — will still generate script
+    }
+
+    if (discoveredSources.length === 0) {
+      // Fallback: generate without web search
+      discoveredSources = pendingUrls.map(u => ({
+        title: u.url,
+        url: u.url,
+        summary: u.note || 'Manually contributed source.',
+        published_date: today,
+        courses: ['intimate_tech', 'social_impact'],
+        contributed: true
+      }));
+    }
+
+    // Step 2: Synthesize podcast script
+    const sourcesForScript = discoveredSources.map((s, i) =>
+      `[${i + 1}] ${s.title}\nURL: ${s.url}\nSummary: ${s.summary}\nCourses: ${(s.courses || []).join(', ')}`
+    ).join('\n\n');
+
+    const scriptPrompt = `You are the host of a daily podcast briefing for a UC Berkeley Haas professor named Adam. Adam teaches two courses:
+
+1. **Intimate Technology** — how technology mediates human intimacy, vulnerability, and connection
+2. **Social Impact Strategy in Commercial Tech** — how commercial tech companies navigate social impact, intentionally and otherwise
+
+Both courses share territory: how technology affects vulnerable populations, how business models shape social outcomes, and where ethics and commercial incentives collide.
+
+Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today}) using the following sources. The script should:
+- Be 5–10 minutes when read aloud (~800–1,500 words)
+- Sound like a well-produced, intelligent daily briefing — natural spoken voice, not a list of summaries
+- Have a clear narrative thread that weaves stories together, especially where they span both courses
+- Explicitly name the conceptual connections between stories when relevant
+- Open with a brief orienting sentence about today's themes, not a generic intro
+- Close with a brief forward-looking thought or question to sit with
+- Reference sources naturally by name/outlet, not by number
+- NOT start with "Welcome" or "Hello" — just open in medias res with the content
+
+Sources for today:
+${sourcesForScript}
+
+Return only the script text. No stage directions, no metadata.`;
+
+    const scriptResponse = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: scriptPrompt }]
+    });
+
+    const script = scriptResponse.content[0].text;
+
+    // Estimate duration (avg 150 words/min)
+    const wordCount = script.split(/\s+/).length;
+    const durationEstimate = Math.round(wordCount / 150);
+
+    // Step 3: Save episode and sources to DB
+    const epResult = db.prepare(`
+      INSERT INTO episodes (number, date, script, duration_estimate)
+      VALUES (?, ?, ?, ?)
+    `).run(episodeNumber, today, script, durationEstimate);
+
+    const episodeId = epResult.lastInsertRowid;
+
+    const insertSource = db.prepare(`
+      INSERT INTO sources (episode_id, title, url, summary, published_date, courses, contributed)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const insertSources = db.transaction((sources) => {
+      for (const s of sources) {
+        insertSource.run(
+          episodeId,
+          s.title || 'Untitled',
+          s.url || null,
+          s.summary || null,
+          s.published_date || today,
+          JSON.stringify(s.courses || []),
+          s.contributed ? 1 : 0
+        );
+      }
+    });
+
+    insertSources(discoveredSources);
+
+    // Mark contributed URLs as used
+    if (pendingUrls.length > 0) {
+      const markUsed = db.prepare('UPDATE contributed_urls SET used = 1, episode_id = ? WHERE id = ?');
+      for (const u of pendingUrls) markUsed.run(episodeId, u.id);
+    }
+
+    // Update source count
+    db.prepare('UPDATE episodes SET source_count = ? WHERE id = ?').run(discoveredSources.length, episodeId);
+
+    const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(episodeId);
+    const sources = db.prepare('SELECT * FROM sources WHERE episode_id = ?').all(episodeId);
+
+    res.json({ episode, sources });
+
+  } catch (err) {
+    console.error('Generation error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── AUDIO GENERATION ────────────────────────────────────────────────────────
+
+app.post('/api/episodes/:id/audio', async (req, res) => {
+  if (!ELEVENLABS_API_KEY) return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
+  if (!ELEVENLABS_VOICE_ID) return res.status(500).json({ error: 'ELEVENLABS_VOICE_ID not configured' });
+
+  const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+  if (!episode) return res.status(404).json({ error: 'Episode not found' });
+  if (!episode.script) return res.status(400).json({ error: 'Episode has no script' });
+
+  try {
+    const audioFilename = `episode-${episode.number}-${episode.date}.mp3`;
+    const audioPath = path.join(AUDIO_DIR, audioFilename);
+
+    const response = await axios.post(
+      `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+      {
+        text: episode.script,
+        model_id: 'eleven_turbo_v2_5',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+          style: 0.3,
+          use_speaker_boost: true
+        }
+      },
+      {
+        headers: {
+          'xi-api-key': ELEVENLABS_API_KEY,
+          'Content-Type': 'application/json',
+          'Accept': 'audio/mpeg'
+        },
+        responseType: 'arraybuffer',
+        timeout: 120000
+      }
+    );
+
+    fs.writeFileSync(audioPath, response.data);
+    db.prepare('UPDATE episodes SET audio_filename = ? WHERE id = ?').run(audioFilename, episode.id);
+
+    res.json({ audio_url: `/audio/${audioFilename}`, filename: audioFilename });
+
+  } catch (err) {
+    console.error('Audio generation error:', err.response?.data || err.message);
+    res.status(500).json({ error: err.response?.data?.detail?.message || err.message });
+  }
+});
+
+// ─── SOURCES ─────────────────────────────────────────────────────────────────
+
+app.get('/api/sources', (req, res) => {
+  const { q, course, episode_id } = req.query;
+  let query = 'SELECT s.*, e.number as episode_number, e.date as episode_date FROM sources s LEFT JOIN episodes e ON e.id = s.episode_id WHERE 1=1';
+  const params = [];
+
+  if (q) {
+    query += ' AND (s.title LIKE ? OR s.summary LIKE ? OR s.url LIKE ?)';
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+  }
+  if (course) {
+    query += ' AND s.courses LIKE ?';
+    params.push(`%${course}%`);
+  }
+  if (episode_id) {
+    query += ' AND s.episode_id = ?';
+    params.push(episode_id);
+  }
+
+  query += ' ORDER BY s.created_at DESC';
+  const sources = db.prepare(query).all(...params);
+
+  // Parse courses JSON for each source
+  const parsed = sources.map(s => ({ ...s, courses: JSON.parse(s.courses || '[]') }));
+  res.json(parsed);
+});
+
+// ─── FEEDBACK ────────────────────────────────────────────────────────────────
+
+app.get('/api/feedback', (req, res) => {
+  const { episode_id, source_id } = req.query;
+  let query = 'SELECT f.*, s.title as source_title FROM feedback f LEFT JOIN sources s ON s.id = f.source_id WHERE 1=1';
+  const params = [];
+  if (episode_id) { query += ' AND f.episode_id = ?'; params.push(episode_id); }
+  if (source_id) { query += ' AND f.source_id = ?'; params.push(source_id); }
+  query += ' ORDER BY f.created_at DESC';
+  res.json(db.prepare(query).all(...params));
+});
+
+app.post('/api/feedback', (req, res) => {
+  const { note, source_id, episode_id } = req.body;
+  if (!note) return res.status(400).json({ error: 'note required' });
+  const result = db.prepare('INSERT INTO feedback (note, source_id, episode_id) VALUES (?, ?, ?)')
+    .run(note, source_id || null, episode_id || null);
+  res.json(db.prepare('SELECT * FROM feedback WHERE id = ?').get(result.lastInsertRowid));
+});
+
+// ─── VOICES (ElevenLabs) ─────────────────────────────────────────────────────
+
+app.get('/api/voices', async (req, res) => {
+  if (!ELEVENLABS_API_KEY) return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
+  try {
+    const response = await axios.get('https://api.elevenlabs.io/v1/voices', {
+      headers: { 'xi-api-key': ELEVENLABS_API_KEY }
+    });
+    res.json(response.data.voices.map(v => ({ voice_id: v.voice_id, name: v.name, category: v.category })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/config', (req, res) => {
+  res.json({
+    voice_id: ELEVENLABS_VOICE_ID,
+    has_anthropic: !!ANTHROPIC_API_KEY,
+    has_elevenlabs: !!ELEVENLABS_API_KEY
+  });
+});
+
+// ─── CATCH-ALL ───────────────────────────────────────────────────────────────
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.listen(PORT, () => {
+  console.log(`Podcast Briefing server running on port ${PORT}`);
+});
