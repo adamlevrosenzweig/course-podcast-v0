@@ -478,11 +478,25 @@ function TodayPage({ onNavigate }) {
     if (!latest) return;
     setGeneratingAudio(true);
     setError('');
-    setStatus('Generating audio with ElevenLabs…');
+    setStatus('Starting audio generation…');
     try {
-      const data = await apiFetch(`/api/episodes/${latest.id}/audio`, { method: 'POST', body: {} });
-      setLatest(prev => ({ ...prev, audio_filename: data.filename }));
-      setStatus('');
+      await apiFetch(`/api/episodes/${latest.id}/audio`, { method: 'POST', body: {} });
+      let done = false;
+      while (!done) {
+        await new Promise(r => setTimeout(r, 3000));
+        const job = await apiFetch(`/api/episodes/${latest.id}/audio/status`);
+        if (job.status === 'complete') {
+          done = true;
+          setLatest(prev => ({ ...prev, audio_filename: job.filename }));
+          setStatus('');
+        } else if (job.status === 'error') {
+          done = true;
+          setError(job.error || 'Audio generation failed');
+          setStatus('');
+        } else {
+          setStatus(job.step || 'Generating audio…');
+        }
+      }
     } catch (e) {
       setError(e.message);
       setStatus('');
@@ -1148,3 +1162,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
 </body>
 </html>
+
