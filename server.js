@@ -23,7 +23,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/audio', express.static(AUDIO_DIR));
 
-// ─── THEMES ──────────────────────────────────────────────────────────────────
+// âââ THEMES ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 app.get('/api/themes', (req, res) => {
   const themes = db.prepare('SELECT * FROM themes ORDER BY course, name').all();
@@ -53,7 +53,7 @@ app.delete('/api/themes/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── CONTRIBUTED URLS ────────────────────────────────────────────────────────
+// âââ CONTRIBUTED URLS ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 app.get('/api/contributed', (req, res) => {
   const urls = db.prepare('SELECT * FROM contributed_urls ORDER BY created_at DESC').all();
@@ -67,7 +67,7 @@ app.post('/api/contributed', (req, res) => {
   res.json(db.prepare('SELECT * FROM contributed_urls WHERE id = ?').get(result.lastInsertRowid));
 });
 
-// ─── EPISODES ────────────────────────────────────────────────────────────────
+// âââ EPISODES ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 app.get('/api/episodes', (req, res) => {
   const episodes = db.prepare(`
@@ -88,7 +88,7 @@ app.get('/api/episodes/:id', (req, res) => {
   res.json({ ...episode, sources, feedback });
 });
 
-// ─── EPISODE GENERATION ──────────────────────────────────────────────────────
+// âââ EPISODE GENERATION ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 // In-memory job store for async generation
 const generationJobs = {};
@@ -110,10 +110,10 @@ app.post('/api/episodes/generate', async (req, res) => {
   const jobId = Date.now().toString();
   generationJobs[jobId] = { jobId, status: 'running', step: 'Starting...', startedAt: Date.now() };
 
-  // Return immediately — client will poll /api/episodes/generate/status
+  // Return immediately â client will poll /api/episodes/generate/status
   res.json({ status: 'started', jobId });
 
-  // Run generation in background (fire and forget — client polls status)
+  // Run generation in background (fire and forget â client polls status)
   (async () => {
     const job = generationJobs[jobId];
     try {
@@ -157,23 +157,23 @@ const feedbackSection = recentFeedback.length > 0
 
 2. **Social Impact Strategy in Commercial Tech** (MBA 290T): Explores how commercial technology companies navigate social impact. Key themes include corporate responsibility, ESG and tech, algorithmic harm, technology policy, ethical product design, stakeholder capitalism, social entrepreneurship in tech, the tension between growth and social good.
 
-Search the web for the 8–12 most important, recent stories and articles published in the last 7 days relevant to these topic themes.
+Search the web for the 8â12 most important, recent stories and articles published in the last 7 days relevant to these topic themes.
 
-Source quality requirements — strictly apply these:
+Source quality requirements â strictly apply these:
 - PREFER: established news outlets (NYT, Washington Post, The Guardian, The Atlantic, Wired, Bloomberg, Reuters, AP), academic and research publications (Nature, Science, SSRN preprints, university press releases from R1 institutions), and specialist tech/policy outlets (MIT Technology Review, IEEE Spectrum, rest of world, Politico, The Markup, Slate, The Verge for substantive pieces)
 - PREFER: articles with a named author or byline
 - AVOID: sites without clear author attribution, content farms, SEO aggregators, press-release republishers, sites with excessive advertising, AI-generated content sites
 - AVOID: product announcements or marketing copy disguised as news
 - AVOID: low-domain-authority blogs or sites you've never heard of
-- If a story is only covered by low-quality sources, skip it — wait for a credible outlet to cover it
+- If a story is only covered by low-quality sources, skip it â wait for a credible outlet to cover it
 ${themeList}${contributedSection}${feedbackSection}
 
 For each source found, provide a JSON object with:
 - title: article/story title
 - url: full URL
-- summary: 2–3 sentence summary of the key points
+- summary: 2â3 sentence summary of the key points
 - published_date: approximate date (YYYY-MM-DD format if known)
-- courses: array of applicable courses — use "intimate_tech", "social_impact", or both
+- courses: array of applicable courses â use "intimate_tech", "social_impact", or both
 - contributed: boolean (true only if it was in the manually contributed URLs list)
 
 Return ONLY a valid JSON array of source objects. No other text.`;
@@ -214,21 +214,21 @@ Return ONLY a valid JSON array of source objects. No other text.`;
 
       const scriptPrompt = `You are the host of a daily podcast briefing for a UC Berkeley Haas professor named Adam. Adam teaches two courses:
 
-1. **Intimate Technology** — how technology mediates human intimacy, vulnerability, and connection
-2. **Social Impact Strategy in Commercial Tech** — how commercial tech companies navigate social impact, intentionally and otherwise
+1. **Intimate Technology** â how technology mediates human intimacy, vulnerability, and connection
+2. **Social Impact Strategy in Commercial Tech** â how commercial tech companies navigate social impact, intentionally and otherwise
 
 Both courses share territory: how technology affects vulnerable populations, how business models shape social outcomes, and where ethics and commercial incentives collide.
 
 Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today}) using the following sources. The script should:
 - Be 10-50 minutes when read aloud
-- Sound like a well-produced, intelligent daily briefing — natural spoken voice, not a list of summaries
+- Sound like a well-produced, intelligent daily briefing â natural spoken voice, not a list of summaries
 - Don't be afraid to be academic in your language - Adam values precision and abhors platitudes
 - Have a clear narrative thread that weaves stories together, especially where they span both courses
 - Explicitly name the conceptual connections between stories when relevant
 - Open with a brief orienting sentence about today's themes, not a generic intro
 - Close with a brief forward-looking thought or question to sit with
 - Reference sources naturally by name/outlet, not by number
-- NOT start with "Welcome" or "Hello" — just open with a quick, clever greeting directly to Adam, then in medias res get on with the content
+- NOT start with "Welcome" or "Hello" â just open with a quick, clever greeting directly to Adam, then in medias res get on with the content
 
 Sources for today:
 ${sourcesForScript}
@@ -258,283 +258,13 @@ Example format:
         episodeTitle = '';
       }
 
-      // Format: "#12 · Some Pithy Title · April 6, 2026"
+      // Format: "#12 Â· Some Pithy Title Â· April 6, 2026"
       const dateFormatted = new Date(today + 'T12:00:00').toLocaleDateString('en-US', {
         month: 'long', day: 'numeric', year: 'numeric'
       });
       const fullTitle = episodeTitle
-        ? `#${episodeNumber} · ${episodeTitle} · ${dateFormatted}`
-        : `#${episodeNumber} · ${dateFormatted}`;
-
-      const wordCount = script.split(/\s+/).length;
-      const durationEstimate = Math.round(wordCount / 150);
-
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
-const axios = require('axios');
-const Anthropic = require('@anthropic-ai/sdk');
-const db = require('./database');
-const cron = require('node-cron');
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '';
-
-const AUDIO_DIR = process.env.AUDIO_DIR || path.join(__dirname, 'audio');
-if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
-
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/audio', express.static(AUDIO_DIR));
-
-// ─── THEMES ──────────────────────────────────────────────────────────────────
-
-app.get('/api/themes', (req, res) => {
-  const themes = db.prepare('SELECT * FROM themes ORDER BY course, name').all();
-  res.json(themes);
-});
-
-app.post('/api/themes', (req, res) => {
-  const { name, course } = req.body;
-  if (!name || !course) return res.status(400).json({ error: 'name and course required' });
-  const valid = ['intimate_tech', 'social_impact', 'shared'];
-  if (!valid.includes(course)) return res.status(400).json({ error: 'course must be intimate_tech, social_impact, or shared' });
-  const result = db.prepare('INSERT INTO themes (name, course, active) VALUES (?, ?, 1)').run(name, course);
-  res.json(db.prepare('SELECT * FROM themes WHERE id = ?').get(result.lastInsertRowid));
-});
-
-app.patch('/api/themes/:id', (req, res) => {
-  const { active, name } = req.body;
-  const theme = db.prepare('SELECT * FROM themes WHERE id = ?').get(req.params.id);
-  if (!theme) return res.status(404).json({ error: 'Not found' });
-  db.prepare('UPDATE themes SET active = COALESCE(?, active), name = COALESCE(?, name) WHERE id = ?')
-    .run(active !== undefined ? (active ? 1 : 0) : null, name || null, req.params.id);
-  res.json(db.prepare('SELECT * FROM themes WHERE id = ?').get(req.params.id));
-});
-
-app.delete('/api/themes/:id', (req, res) => {
-  db.prepare('DELETE FROM themes WHERE id = ?').run(req.params.id);
-  res.json({ ok: true });
-});
-
-// ─── CONTRIBUTED URLS ────────────────────────────────────────────────────────
-
-app.get('/api/contributed', (req, res) => {
-  const urls = db.prepare('SELECT * FROM contributed_urls ORDER BY created_at DESC').all();
-  res.json(urls);
-});
-
-app.post('/api/contributed', (req, res) => {
-  const { url, note } = req.body;
-  if (!url) return res.status(400).json({ error: 'url required' });
-  const result = db.prepare('INSERT INTO contributed_urls (url, note) VALUES (?, ?)').run(url, note || null);
-  res.json(db.prepare('SELECT * FROM contributed_urls WHERE id = ?').get(result.lastInsertRowid));
-});
-
-// ─── EPISODES ────────────────────────────────────────────────────────────────
-
-app.get('/api/episodes', (req, res) => {
-  const episodes = db.prepare(`
-    SELECT e.*, COUNT(s.id) as source_count
-    FROM episodes e
-    LEFT JOIN sources s ON s.episode_id = e.id
-    GROUP BY e.id
-    ORDER BY e.number DESC
-  `).all();
-  res.json(episodes);
-});
-
-app.get('/api/episodes/:id', (req, res) => {
-  const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
-  if (!episode) return res.status(404).json({ error: 'Not found' });
-  const sources = db.prepare('SELECT * FROM sources WHERE episode_id = ? ORDER BY id').all(req.params.id);
-  const feedback = db.prepare('SELECT * FROM feedback WHERE episode_id = ? ORDER BY created_at').all(req.params.id);
-  res.json({ ...episode, sources, feedback });
-});
-
-// ─── EPISODE GENERATION ──────────────────────────────────────────────────────
-
-// In-memory job store for async generation
-const generationJobs = {};
-
-app.get('/api/episodes/generate/status', (req, res) => {
-  const jobs = Object.values(generationJobs);
-  const latest = jobs.sort((a, b) => b.startedAt - a.startedAt)[0];
-  if (!latest) return res.json({ status: 'idle' });
-  res.json(latest);
-});
-
-app.post('/api/episodes/generate', async (req, res) => {
-  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
-
-  // Check if generation already running
-  const running = Object.values(generationJobs).find(j => j.status === 'running');
-  if (running) return res.json({ status: 'running', message: 'Generation already in progress' });
-
-  const jobId = Date.now().toString();
-  generationJobs[jobId] = { jobId, status: 'running', step: 'Starting...', startedAt: Date.now() };
-
-  // Return immediately — client will poll /api/episodes/generate/status
-  res.json({ status: 'started', jobId });
-
-  // Run generation in background (fire and forget — client polls status)
-  (async () => {
-    const job = generationJobs[jobId];
-    try {
-      const themes = db.prepare('SELECT * FROM themes WHERE active = 1').all();
-      if (themes.length === 0) {
-        job.status = 'error'; job.error = 'No active themes configured'; return;
-      }
-
-      const pendingUrls = db.prepare('SELECT * FROM contributed_urls WHERE used = 0').all();
-      const lastEp = db.prepare('SELECT MAX(number) as n FROM episodes').get();
-      const episodeNumber = (lastEp.n || 0) + 1;
-      const today = new Date().toISOString().split('T')[0];
-      const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-
-      // Step 1: Discover sources
-      job.step = 'Searching for sources...';
-      const themeList = themes.map(t => `- ${t.name} (${t.course.replace('_', ' ')})`).join('\n');
-   const contributedSection = pendingUrls.length > 0
-  ? `\n\nThe following URLs have been manually contributed and MUST be included as sources:\n${pendingUrls.map(u => `- ${u.url}${u.note ? ` (note: ${u.note})` : ''}`).join('\n')}`
-  : '';
-
-const recentFeedback = db.prepare(`
-  SELECT f.note, s.title as source_title, s.url as source_url
-  FROM feedback f
-  LEFT JOIN sources s ON s.id = f.source_id
-  ORDER BY f.created_at DESC
-  LIMIT 20
-`).all();
-
-const feedbackSection = recentFeedback.length > 0
-  ? `\n\nRecent listener feedback to inform your source selection:\n${recentFeedback.map(f =>
-      f.source_title
-        ? `- Re "${f.source_title}" (${f.source_url}): "${f.note}"`
-        : `- General note: "${f.note}"`
-    ).join('\n')}`
-  : '';
-
-      const discoveryPrompt = `You are a research assistant for a UC Berkeley professor who teaches two courses:
-
-1. **Intimate Technology** (an undergrad business course): Explores how technology mediates human intimacy, vulnerability, and connection. Key themes include AI companions, surveillance capitalism, haptic technology, digital intimacy, consent and data, companion robots, policy and regulation of intimate tech, ethics of consequence-free caregiving, identity performance and networked life.
-
-2. **Social Impact Strategy in Commercial Tech** (MBA 290T): Explores how commercial technology companies navigate social impact. Key themes include corporate responsibility, ESG and tech, algorithmic harm, technology policy, ethical product design, stakeholder capitalism, social entrepreneurship in tech, the tension between growth and social good.
-
-Search the web for the 8–12 most important, recent stories and articles published in the last 7 days relevant to these topic themes.
-
-Source quality requirements — strictly apply these:
-- PREFER: established news outlets (NYT, Washington Post, The Guardian, The Atlantic, Wired, Bloomberg, Reuters, AP), academic and research publications (Nature, Science, SSRN preprints, university press releases from R1 institutions), and specialist tech/policy outlets (MIT Technology Review, IEEE Spectrum, rest of world, Politico, The Markup, Slate, The Verge for substantive pieces)
-- PREFER: articles with a named author or byline
-- AVOID: sites without clear author attribution, content farms, SEO aggregators, press-release republishers, sites with excessive advertising, AI-generated content sites
-- AVOID: product announcements or marketing copy disguised as news
-- AVOID: low-domain-authority blogs or sites you've never heard of
-- If a story is only covered by low-quality sources, skip it — wait for a credible outlet to cover it
-${themeList}${contributedSection}${feedbackSection}
-
-For each source found, provide a JSON object with:
-- title: article/story title
-- url: full URL
-- summary: 2–3 sentence summary of the key points
-- published_date: approximate date (YYYY-MM-DD format if known)
-- courses: array of applicable courses — use "intimate_tech", "social_impact", or both
-- contributed: boolean (true only if it was in the manually contributed URLs list)
-
-Return ONLY a valid JSON array of source objects. No other text.`;
-
-      let discoveredSources = [];
-      try {
-        const discoveryResponse = await client.messages.create({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 8000,
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-          messages: [{ role: 'user', content: discoveryPrompt }]
-        });
-        let jsonText = '';
-        for (const block of discoveryResponse.content) {
-          if (block.type === 'text') jsonText += block.text;
-        }
-        const jsonMatch = jsonText.match(/\[[\s\S]*\]/);
-        if (jsonMatch) discoveredSources = JSON.parse(jsonMatch[0]);
-      } catch (err) {
-        console.error('Discovery error:', err.message);
-      }
-
-      if (discoveredSources.length === 0) {
-        discoveredSources = pendingUrls.map(u => ({
-          title: u.url, url: u.url,
-          summary: u.note || 'Manually contributed source.',
-          published_date: today,
-          courses: ['intimate_tech', 'social_impact'],
-          contributed: true
-        }));
-      }
-
-      // Step 2: Write script
-      job.step = `Writing script from ${discoveredSources.length} sources...`;
-      const sourcesForScript = discoveredSources.map((s, i) =>
-        `[${i + 1}] ${s.title}\nURL: ${s.url}\nSummary: ${s.summary}\nCourses: ${(s.courses || []).join(', ')}`
-      ).join('\n\n');
-
-      const scriptPrompt = `You are the host of a daily podcast briefing for a UC Berkeley Haas professor named Adam. Adam teaches two courses:
-
-1. **Intimate Technology** — how technology mediates human intimacy, vulnerability, and connection
-2. **Social Impact Strategy in Commercial Tech** — how commercial tech companies navigate social impact, intentionally and otherwise
-
-Both courses share territory: how technology affects vulnerable populations, how business models shape social outcomes, and where ethics and commercial incentives collide.
-
-Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today}) using the following sources. The script should:
-- Be 10-50 minutes when read aloud
-- Sound like a well-produced, intelligent daily briefing — natural spoken voice, not a list of summaries
-- Don't be afraid to be academic in your language - Adam values precision and abhors platitudes
-- Have a clear narrative thread that weaves stories together, especially where they span both courses
-- Explicitly name the conceptual connections between stories when relevant
-- Open with a brief orienting sentence about today's themes, not a generic intro
-- Close with a brief forward-looking thought or question to sit with
-- Reference sources naturally by name/outlet, not by number
-- NOT start with "Welcome" or "Hello" — just open with a quick, clever greeting directly to Adam, then in medias res get on with the content
-
-Sources for today:
-${sourcesForScript}
-
-Return a JSON object with exactly two fields:
-- "title": a short, punchy 4-7 word title capturing today's central theme (no quotes, no episode number)
-- "script": the full podcast script text
-
-Example format:
-{"title": "When Convenience Becomes Surveillance", "script": "Adam, a quick one today..."}`;
-      const scriptResponse = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
-        messages: [{ role: 'user', content: scriptPrompt }]
-      });
-      const rawResponse = scriptResponse.content[0].text.trim();
-      let script, episodeTitle;
-      try {
-        // Strip markdown fences if Claude wrapped it anyway
-        const jsonText = rawResponse.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-        const parsed = JSON.parse(jsonText);
-        script = parsed.script || rawResponse;
-        episodeTitle = parsed.title || '';
-      } catch (_) {
-        // Fallback: treat whole response as script
-        script = rawResponse;
-        episodeTitle = '';
-      }
-
-      // Format: "#12 · Some Pithy Title · April 6, 2026"
-      const dateFormatted = new Date(today + 'T12:00:00').toLocaleDateString('en-US', {
-        month: 'long', day: 'numeric', year: 'numeric'
-      });
-      const fullTitle = episodeTitle
-        ? `#${episodeNumber} · ${episodeTitle} · ${dateFormatted}`
-        : `#${episodeNumber} · ${dateFormatted}`;
+        ? `#${episodeNumber} Â· ${episodeTitle} Â· ${dateFormatted}`
+        : `#${episodeNumber} Â· ${dateFormatted}`;
 
       const wordCount = script.split(/\s+/).length;
       const durationEstimate = Math.round(wordCount / 150);
@@ -578,7 +308,7 @@ Example format:
   })();
 });
 
-// ─── AUDIO GENERATION ────────────────────────────────────────────────────────
+// âââ AUDIO GENERATION ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 // In-memory job store for audio generation (same pattern as episode generation)
 const audioJobs = {};
@@ -606,7 +336,7 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
   const jobId = Date.now().toString();
   audioJobs[jobId] = { jobId, episodeId: req.params.id, status: 'running', step: 'Connecting to ElevenLabs...', startedAt: Date.now() };
 
-  // Return immediately — client polls /api/episodes/:id/audio/status
+  // Return immediately â client polls /api/episodes/:id/audio/status
   res.json({ status: 'started', jobId });
 
   (async () => {
@@ -626,7 +356,7 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
         {
           headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
           responseType: 'arraybuffer',
-          timeout: 300000  // 5 min — Railway proxy is bypassed since we returned already
+          timeout: 300000  // 5 min â Railway proxy is bypassed since we returned already
         }
       );
 
@@ -646,17 +376,17 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
   })();
 });
 
-// ─── SOURCES ─────────────────────────────────────────────────────────────────
+// âââ SOURCES âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 app.get('/api/sources', (req, res) => {
  const { q, course, episode_id, from_date } = req.query;
   let query = `SELECT s.*, e.number as episode_number, e.date as episode_date,
-    COUNT(f.id) as note_count,
-    GROUP_CONCAT(f.note, '|||') as notes
-    FROM sources s
-    LEFT JOIN episodes e ON e.id = s.episode_id
-    LEFT JOIN feedback f ON f.source_id = s.id
-    WHERE 1=1`;
+      COUNT(f.id) as note_count,
+      GROUP_CONCAT(f.note, '|||') as notes
+      FROM sources s
+      LEFT JOIN episodes e ON e.id = s.episode_id
+      LEFT JOIN feedback f ON f.source_id = s.id
+      WHERE 1=1`;
   const params = [];
 
   if (q) {
@@ -684,7 +414,7 @@ if (episode_id) {
   res.json(parsed);
 });
 
-// ─── FEEDBACK ────────────────────────────────────────────────────────────────
+// âââ FEEDBACK ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 app.get('/api/feedback', (req, res) => {
   const { episode_id, source_id } = req.query;
@@ -704,7 +434,7 @@ app.post('/api/feedback', (req, res) => {
   res.json(db.prepare('SELECT * FROM feedback WHERE id = ?').get(result.lastInsertRowid));
 });
 
-// ─── VOICES (ElevenLabs) ─────────────────────────────────────────────────────
+// âââ VOICES (ElevenLabs) âââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 app.get('/api/voices', async (req, res) => {
   if (!ELEVENLABS_API_KEY) return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
@@ -726,7 +456,7 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-// ─── RSS FEED (Apple Podcasts compatible) ────────────────────────────────────
+// âââ RSS FEED (Apple Podcasts compatible) ââââââââââââââââââââââââââââââââââââ
 
 app.get('/feed.xml', (req, res) => {
   const BASE_URL = process.env.BASE_URL || `https://${req.headers.host}`;
@@ -749,7 +479,7 @@ app.get('/feed.xml', (req, res) => {
     const description = escXml(ep.script ? ep.script.substring(0, 300) + '...' : `Episode ${ep.number}`);
     return `
     <item>
-      <title>${escXml(ep.title || `Episode ${ep.number} – ${ep.date}`)}</title>
+      <title>${escXml(ep.title || `Episode ${ep.number} â ${ep.date}`)}</title>
       <description>${description}</description>
       <pubDate>${pubDate}</pubDate>
       <enclosure url="${audioUrl}" length="${audioSize}" type="audio/mpeg"/>
@@ -765,7 +495,7 @@ app.get('/feed.xml', (req, res) => {
   xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
   xmlns:content="http://purl.org/rss/modules/content/">
   <channel>
-    <title>Course Briefing – Adam Rosenzweig</title>
+    <title>Course Briefing â Adam Rosenzweig</title>
 <description>Daily AI-generated briefings on the state of intimate technology and social impact strategy for commercial tech companies.</description>    <link>${BASE_URL}</link>
     <language>en-us</language>
     <itunes:author>Adam Rosenzweig</itunes:author>
@@ -783,13 +513,13 @@ app.get('/feed.xml', (req, res) => {
   res.send(xml);
 });
 
-// ─── CATCH-ALL ───────────────────────────────────────────────────────────────
+// âââ CATCH-ALL âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 
-// ─── DAILY AUTO-GENERATION ───────────────────────────────────────────────────
+// âââ DAILY AUTO-GENERATION âââââââââââââââââââââââââââââââââââââââââââââââââââ
 // Runs every day at 7:00 AM Pacific time (UTC-7 in PDT, UTC-8 in PST).
 // node-cron schedules in server local time (UTC on Railway), so we use UTC hours:
 //   7 AM PT (PDT, UTC-7) = 14:00 UTC  |  7 AM PT (PST, UTC-8) = 15:00 UTC
