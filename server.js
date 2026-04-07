@@ -463,7 +463,7 @@ app.get('/feed.xml', (req, res) => {
   xmlns:content="http://purl.org/rss/modules/content/">
   <channel>
     <title>Course Briefing – Adam Rosenzweig</title>
-    <description>Daily AI-generated briefings for Intimate Technology and Social Impact Strategy in Commercial Tech at UC Berkeley Haas.</description>
+    <description><description>Daily AI-generated briefings on the state of intimate technology and social impact strategy for commercial tech.</description>.</description>
     <link>${BASE_URL}</link>
     <language>en-us</language>
     <itunes:author>Adam Rosenzweig</itunes:author>
