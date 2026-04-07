@@ -739,18 +739,23 @@ function getOutlet(url) {
 
 function SourceCard({ source }) {
   const [showFb, setShowFb] = useState(false);
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(``);
   const [saved, setSaved] = useState(false);
+  const [existingNotes, setExistingNotes] = useState(
+    source.notes ? source.notes.split('|||').filter(Boolean) : []
+  );
 
   const courses = typeof source.courses === 'string' ? JSON.parse(source.courses) : (source.courses || []);
   const outlet = getOutlet(source.url);
+  const noteCount = existingNotes.length;
 
   async function saveFeedback(e) {
     e.preventDefault();
     if (!note.trim()) return;
     try {
       await apiFetch('/api/feedback', { method: 'POST', body: { note, source_id: source.id, episode_id: source.episode_id } });
-      setNote('');
+      setExistingNotes(prev => [...prev, note]);
+      setNote(``);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch {}
@@ -785,21 +790,28 @@ function SourceCard({ source }) {
         {source.episode_number && <span style={{fontSize: '11px', color: 'var(--text-muted)'}}>Ep. {source.episode_number}</span>}
         <button
           className="btn btn-ghost btn-sm"
-          style={{marginLeft: 'auto', fontSize: '11px', padding: '3px 8px'}}
+          style={{marginLeft: 'auto', fontSize: '11px', padding: '3px 8px', color: noteCount > 0 ? 'var(--accent)' : undefined}}
           onClick={() => setShowFb(s => !s)}
-        >note</button>
+        >{noteCount > 0 ? `${noteCount} Note${noteCount > 1 ? 's' : ''}` : 'Add note'}</button>
       </div>
       {showFb && (
-        <form onSubmit={saveFeedback} style={{marginTop: '12px', display: 'flex', gap: '8px'}}>
-          <input
-            type="text"
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            placeholder="Add a note about this source…"
-            style={{flex: 1}}
-          />
-          <button type="submit" className="btn btn-ghost btn-sm">{saved ? '✓' : 'Save'}</button>
-        </form>
+        <div style={{marginTop: '12px'}}>
+          {existingNotes.map((n, i) => (
+            <div key={i} style={{fontSize:'13px', color:'var(--text)', background:'var(--surface2)', borderLeft:'2px solid var(--accent-dim)', padding:'8px 12px', marginBottom:'8px', borderRadius:'0 4px 4px 0'}}>
+              {n}
+            </div>
+          ))}
+          <form onSubmit={saveFeedback} style={{display: 'flex', gap: '8px'}}>
+            <input
+              type="text"
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Add a note about this source…"
+              style={{flex: 1}}
+            />
+            <button type="submit" className="btn btn-ghost btn-sm">{saved ? '✓' : 'Save'}</button>
+          </form>
+        </div>
       )}
     </div>
   );
