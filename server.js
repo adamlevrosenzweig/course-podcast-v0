@@ -89,30 +89,52 @@ app.get('/api/episodes/:id', (req, res) => {
 
 // ─── EPISODE GENERATION ──────────────────────────────────────────────────────
 
+// In-memory job store for async generation
+const generationJobs = {};
+
+app.get('/api/episodes/generate/status', (req, res) => {
+  const jobs = Object.values(generationJobs);
+  const latest = jobs.sort((a, b) => b.startedAt - a.startedAt)[0];
+  if (!latest) return res.json({ status: 'idle' });
+  res.json(latest);
+});
+
 app.post('/api/episodes/generate', async (req, res) => {
   if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
-  try {
-    const themes = db.prepare('SELECT * FROM themes WHERE active = 1').all();
-    if (themes.length === 0) return res.status(400).json({ error: 'No active themes configured' });
+  // Check if generation already running
+  const running = Object.values(generationJobs).find(j => j.status === 'running');
+  if (running) return res.json({ status: 'running', message: 'Generation already in progress' });
 
-    const pendingUrls = db.prepare('SELECT * FROM contributed_urls WHERE used = 0').all();
+  const jobId = Date.now().toString();
+  generationJobs[jobId] = { jobId, status: 'running', step: 'Starting...', startedAt: Date.now() };
 
-    const lastEp = db.prepare('SELECT MAX(number) as n FROM episodes').get();
-    const episodeNumber = (lastEp.n || 0) + 1;
-    const today = new Date().toISOString().split('T')[0];
+  // Return immediately — client will poll /api/episodes/generate/status
+  res.json({ status: 'started', jobId });
 
-    // Step 1: Discover sources via Anthropic with web search
-    res.setHeader('Content-Type', 'application/json');
+  // Run generation in background (fire and forget — client polls status)
+  (async () => {
+    const job = generationJobs[jobId];
+    try {
+      const themes = db.prepare('SELECT * FROM themes WHERE active = 1').all();
+      if (themes.length === 0) {
+        job.status = 'error'; job.error = 'No active themes configured'; return;
+      }
 
-    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+      const pendingUrls = db.prepare('SELECT * FROM contributed_urls WHERE used = 0').all();
+      const lastEp = db.prepare('SELECT MAX(number) as n FROM episodes').get();
+      const episodeNumber = (lastEp.n || 0) + 1;
+      const today = new Date().toISOString().split('T')[0];
+      const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
-    const themeList = themes.map(t => `- ${t.name} (${t.course.replace('_', ' ')})`).join('\n');
-    const contributedSection = pendingUrls.length > 0
-      ? `\n\nThe following URLs have been manually contributed and MUST be included as sources:\n${pendingUrls.map(u => `- ${u.url}${u.note ? ` (note: ${u.note})` : ''}`).join('\n')}`
-      : '';
+      // Step 1: Discover sources
+      job.step = 'Searching for sources...';
+      const themeList = themes.map(t => `- ${t.name} (${t.course.replace('_', ' ')})`).join('\n');
+      const contributedSection = pendingUrls.length > 0
+        ? `\n\nThe following URLs have been manually contributed and MUST be included as sources:\n${pendingUrls.map(u => `- ${u.url}${u.note ? ` (note: ${u.note})` : ''}`).join('\n')}`
+        : '';
 
-    const discoveryPrompt = `You are a research assistant for a UC Berkeley professor who teaches two courses:
+      const discoveryPrompt = `You are a research assistant for a UC Berkeley professor who teaches two courses:
 
 1. **Intimate Technology** (UGBA, Haas): Explores how technology mediates human intimacy, vulnerability, and connection. Key themes include AI companions, surveillance capitalism, haptic technology, digital intimacy, consent and data, companion robots, policy and regulation of intimate tech, ethics of consequence-free caregiving, identity performance and networked life.
 
@@ -132,52 +154,41 @@ For each source found, provide a JSON object with:
 
 Return ONLY a valid JSON array of source objects. No other text.`;
 
-    let discoveredSources = [];
-
-    try {
-      const discoveryResponse = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 8000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{ role: 'user', content: discoveryPrompt }]
-      });
-
-      // Extract text content from response (may include tool use results)
-      let jsonText = '';
-      for (const block of discoveryResponse.content) {
-        if (block.type === 'text') {
-          jsonText += block.text;
+      let discoveredSources = [];
+      try {
+        const discoveryResponse = await client.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 8000,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages: [{ role: 'user', content: discoveryPrompt }]
+        });
+        let jsonText = '';
+        for (const block of discoveryResponse.content) {
+          if (block.type === 'text') jsonText += block.text;
         }
+        const jsonMatch = jsonText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) discoveredSources = JSON.parse(jsonMatch[0]);
+      } catch (err) {
+        console.error('Discovery error:', err.message);
       }
 
-      // Parse JSON array from response
-      const jsonMatch = jsonText.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        discoveredSources = JSON.parse(jsonMatch[0]);
+      if (discoveredSources.length === 0) {
+        discoveredSources = pendingUrls.map(u => ({
+          title: u.url, url: u.url,
+          summary: u.note || 'Manually contributed source.',
+          published_date: today,
+          courses: ['intimate_tech', 'social_impact'],
+          contributed: true
+        }));
       }
-    } catch (err) {
-      console.error('Discovery error:', err.message);
-      // Continue with empty sources — will still generate script
-    }
 
-    if (discoveredSources.length === 0) {
-      // Fallback: generate without web search
-      discoveredSources = pendingUrls.map(u => ({
-        title: u.url,
-        url: u.url,
-        summary: u.note || 'Manually contributed source.',
-        published_date: today,
-        courses: ['intimate_tech', 'social_impact'],
-        contributed: true
-      }));
-    }
+      // Step 2: Write script
+      job.step = `Writing script from ${discoveredSources.length} sources...`;
+      const sourcesForScript = discoveredSources.map((s, i) =>
+        `[${i + 1}] ${s.title}\nURL: ${s.url}\nSummary: ${s.summary}\nCourses: ${(s.courses || []).join(', ')}`
+      ).join('\n\n');
 
-    // Step 2: Synthesize podcast script
-    const sourcesForScript = discoveredSources.map((s, i) =>
-      `[${i + 1}] ${s.title}\nURL: ${s.url}\nSummary: ${s.summary}\nCourses: ${(s.courses || []).join(', ')}`
-    ).join('\n\n');
-
-    const scriptPrompt = `You are the host of a daily podcast briefing for a UC Berkeley Haas professor named Adam. Adam teaches two courses:
+      const scriptPrompt = `You are the host of a daily podcast briefing for a UC Berkeley Haas professor named Adam. Adam teaches two courses:
 
 1. **Intimate Technology** — how technology mediates human intimacy, vulnerability, and connection
 2. **Social Impact Strategy in Commercial Tech** — how commercial tech companies navigate social impact, intentionally and otherwise
@@ -199,68 +210,52 @@ ${sourcesForScript}
 
 Return only the script text. No stage directions, no metadata.`;
 
-    const scriptResponse = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
-      messages: [{ role: 'user', content: scriptPrompt }]
-    });
+      const scriptResponse = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        messages: [{ role: 'user', content: scriptPrompt }]
+      });
+      const script = scriptResponse.content[0].text;
+      const wordCount = script.split(/\s+/).length;
+      const durationEstimate = Math.round(wordCount / 150);
 
-    const script = scriptResponse.content[0].text;
+      // Step 3: Save to DB
+      job.step = 'Saving episode...';
+      const epResult = db.prepare(
+        'INSERT INTO episodes (number, date, script, duration_estimate) VALUES (?, ?, ?, ?)'
+      ).run(episodeNumber, today, script, durationEstimate);
+      const episodeId = epResult.lastInsertRowid;
 
-    // Estimate duration (avg 150 words/min)
-    const wordCount = script.split(/\s+/).length;
-    const durationEstimate = Math.round(wordCount / 150);
+      const insertSource = db.prepare(
+        'INSERT INTO sources (episode_id, title, url, summary, published_date, courses, contributed) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      );
+      db.exec('BEGIN');
+      try {
+        for (const s of discoveredSources) {
+          insertSource.run(episodeId, s.title || 'Untitled', s.url || null,
+            s.summary || null, s.published_date || today,
+            JSON.stringify(s.courses || []), s.contributed ? 1 : 0);
+        }
+        db.exec('COMMIT');
+      } catch (txErr) { db.exec('ROLLBACK'); throw txErr; }
 
-    // Step 3: Save episode and sources to DB
-    const epResult = db.prepare(`
-      INSERT INTO episodes (number, date, script, duration_estimate)
-      VALUES (?, ?, ?, ?)
-    `).run(episodeNumber, today, script, durationEstimate);
-
-    const episodeId = epResult.lastInsertRowid;
-
-    const insertSource = db.prepare(`
-      INSERT INTO sources (episode_id, title, url, summary, published_date, courses, contributed)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    db.exec('BEGIN');
-    try {
-      for (const s of discoveredSources) {
-        insertSource.run(
-          episodeId,
-          s.title || 'Untitled',
-          s.url || null,
-          s.summary || null,
-          s.published_date || today,
-          JSON.stringify(s.courses || []),
-          s.contributed ? 1 : 0
-        );
+      if (pendingUrls.length > 0) {
+        const markUsed = db.prepare('UPDATE contributed_urls SET used = 1, episode_id = ? WHERE id = ?');
+        for (const u of pendingUrls) markUsed.run(episodeId, u.id);
       }
-      db.exec('COMMIT');
-    } catch (txErr) {
-      db.exec('ROLLBACK');
-      throw txErr;
+      db.prepare('UPDATE episodes SET source_count = ? WHERE id = ?').run(discoveredSources.length, episodeId);
+
+      const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(episodeId);
+      job.status = 'complete';
+      job.step = 'Done';
+      job.episodeId = Number(episodeId);
+      job.episode = episode;
+    } catch (err) {
+      console.error('Generation error:', err);
+      generationJobs[jobId].status = 'error';
+      generationJobs[jobId].error = err.message;
     }
-
-    // Mark contributed URLs as used
-    if (pendingUrls.length > 0) {
-      const markUsed = db.prepare('UPDATE contributed_urls SET used = 1, episode_id = ? WHERE id = ?');
-      for (const u of pendingUrls) markUsed.run(episodeId, u.id);
-    }
-
-    // Update source count
-    db.prepare('UPDATE episodes SET source_count = ? WHERE id = ?').run(discoveredSources.length, episodeId);
-
-    const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(episodeId);
-    const sources = db.prepare('SELECT * FROM sources WHERE episode_id = ?').all(episodeId);
-
-    res.json({ episode, sources });
-
-  } catch (err) {
-    console.error('Generation error:', err);
-    res.status(500).json({ error: err.message });
-  }
+  })();
 });
 
 // ─── AUDIO GENERATION ────────────────────────────────────────────────────────
