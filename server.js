@@ -224,8 +224,9 @@ Return only the script text. No stage directions, no metadata.`;
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
-    const insertSources = db.transaction((sources) => {
-      for (const s of sources) {
+    db.exec('BEGIN');
+    try {
+      for (const s of discoveredSources) {
         insertSource.run(
           episodeId,
           s.title || 'Untitled',
@@ -236,9 +237,11 @@ Return only the script text. No stage directions, no metadata.`;
           s.contributed ? 1 : 0
         );
       }
-    });
-
-    insertSources(discoveredSources);
+      db.exec('COMMIT');
+    } catch (txErr) {
+      db.exec('ROLLBACK');
+      throw txErr;
+    }
 
     // Mark contributed URLs as used
     if (pendingUrls.length > 0) {
