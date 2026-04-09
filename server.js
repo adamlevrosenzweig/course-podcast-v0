@@ -212,6 +212,9 @@ Return ONLY a valid JSON array of source objects. No other text.`;
         `[${i + 1}] ${s.title}\nURL: ${s.url}\nSummary: ${s.summary}\nCourses: ${(s.courses || []).join(', ')}`
       ).join('\n\n');
 
+      const recentTitles = db.prepare('SELECT title FROM episodes ORDER BY number DESC LIMIT 10').all().map(r => r.title).filter(Boolean);
+      const recentTitlesBlock = recentTitles.length ? '\nRecent episode titles (do NOT reuse these themes or framings):\n' + recentTitles.map(t => '- ' + t).join('\n') + '\n' : '';
+
       const scriptPrompt = `You are the host of a daily podcast briefing for a UC Berkeley Haas professor named Adam. Adam teaches two courses:
 
 1. **Intimate Technology** â how technology mediates human intimacy, vulnerability, and connection
@@ -234,7 +237,7 @@ Sources for today:
 ${sourcesForScript}
 
 Return a JSON object with exactly two fields:
-- "title": a short, punchy 4-7 word title capturing today's central theme (no quotes, no episode number)
+- "title": a short, punchy 4-7 word title capturing today's central theme (no quotes, no episode number)${recentTitlesBlock}
 - "script": the full podcast script text
 
 Example format:
@@ -464,11 +467,17 @@ app.get('/feed.xml', (req, res) => {
     SELECT * FROM episodes WHERE audio_filename IS NOT NULL ORDER BY number DESC
   `).all();
 
-  const escXml = (str = '') => str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  const fixEncoding = (str = '') => str
+    .replace(/Â·/g, '·')
+    .replace(/â€™/g, '\u2019')
+    .replace(/â€œ/g, '\u201C')
+    .replace(/â€\u009D/g, '\u201D')
+    .replace(/â€"/g, '\u2013')
+    .replace(/â€"/g, '\u2014');
+
+  const escXml = (str = '') => fixEncoding(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   const items = episodes.map(ep => {
     const audioUrl = `${BASE_URL}/audio/${ep.audio_filename}`;
@@ -501,15 +510,15 @@ app.get('/feed.xml', (req, res) => {
     <itunes:author>Adam Rosenzweig</itunes:author>
     <itunes:email>adam.lev.rosenzweig@gmail.com</itunes:email>
     <itunes:category text="Education"/>
-    <itunes:image href="${BASE_URL}/podcast_cover.png"/>
-    <image><url>${BASE_URL}/podcast_cover.png</url><title>Course Briefing</title><link>${BASE_URL}</link></image>
+    <itunes:image href="${BASE_URL}/podcast_cover_v2.png"/>
+    <image><url>${BASE_URL}/podcast_cover_v2.png</url><title>Course Briefing</title><link>${BASE_URL}</link></image>
     <itunes:explicit>false</itunes:explicit>
     <itunes:type>episodic</itunes:type>
     ${items}
   </channel>
 </rss>`;
 
-  res.set('Content-Type', 'application/rss+xml');
+  res.set('Content-Type', 'application/rss+xml; charset=utf-8');
   res.send(xml);
 });
 
