@@ -543,13 +543,52 @@ cron.schedule(CRON_SCHEDULE, async () => {
   // Reuse the same generation logic as the POST endpoint
   // by making an internal HTTP request to ourselves
   const port = process.env.PORT || 3000;
+  const base = `http://localhost:${port}`;
+
   try {
-    const res = await axios.post(`http://localhost:${port}/api/episodes/generate`, {});
-    console.log('[cron] Generation job started:', res.data.jobId || res.data.status);
+    // Step 1: trigger generation
+    await axios.post(`${base}/api/episodes/generate`, {});
+    console.log('[cron] Generation started, polling for completion...');
+
+    // Step 2: poll until done (10 min timeout)
+    let episodeId = null;
+    const genDeadline = Date.now() + 10 * 60 * 1000;
+    while (Date.now() < genDeadline) {
+      await new Promise(r => setTimeout(r, 15000));
+      const { data } = await axios.get(`${base}/api/episodes/generate/status`);
+      console.log('[cron] Generation status:', data.status, data.step || '');
+      if (data.status === 'error') {
+        console.error('[cron] Generation failed:', data.error);
+        return;
+      }
+      if (data.status === 'complete') {
+        episodeId = data.episodeId;
+        break;
+      }
+    }
+    if (!episodeId) {
+      console.error('[cron] Generation timed out after 10 minutes.');
+      return;
+    }
+
+    // Step 3: trigger audio generation
+    console.log('[cron] Script complete, triggering audio for episode', episodeId);
+    await axios.post(`${base}/api/episodes/${episodeId}/audio`, {});
+
+    // Step 4: poll until audio is ready (5 min timeout)
+    const audioDeadline = Date.now() + 5 * 60 * 1000;
+    while (Date.now() < audioDeadline) {
+      await new Promise(r => setTimeout(r, 20000));
+      const { data } = await axios.get(`${base}/api/episodes/${episodeId}`);
+      if (data.audio_filename) {
+        console.log('[cron] Audio ready:', data.audio_filename);
+        return;
+      }
+    }
+    console.error('[cron] Audio generation timed out after 5 minutes.');
   } catch (err) {
-    console.error('[cron] Failed to start generation:', err.message);
-  }
-}, {
+    console.error('[cron] Cron job failed:', err.message);
+  }}, {
   timezone: 'America/Los_Angeles'  // handles DST automatically
 });
 
