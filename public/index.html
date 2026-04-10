@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Adam's Daily Research Briefing</title>
+  <title>Human In The Loop</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -600,13 +600,13 @@ function TodayPage({ onNavigate }) {
   return (
     <div>
       <p className="page-subtitle">{today}</p>
-      <h1 className="page-title">Today's Briefing</h1>
+      <h1 className="page-title">Today's Episode</h1>
 
       {!latest && !generating && (
         <div className="generate-hero">
           <div className="generate-hero-title">No episode yet for today</div>
           <div className="generate-hero-sub">
-            Generate today's briefing to search the web for relevant stories across<br />
+            Generate today's episode to search the web for relevant stories across<br />
             Intimate Technology and Social Impact Strategy.
           </div>
           <button className="btn btn-primary" onClick={generate}>
@@ -1270,7 +1270,7 @@ function App() {
     <div className="app">
       <div className="sidebar">
         <div className="sidebar-header">
-          <div className="sidebar-logo">The Briefing</div>
+          <div className="sidebar-logo">Human In The Loop</div>
           <div className="sidebar-sub">Daily Research Podcast</div>
         </div>
         <nav className="sidebar-nav">
