@@ -2,7 +2,7 @@
 
 Live URL: https://course-podcast-v0-production.up.railway.app  
 GitHub: https://github.com/adamlevrosenzweig/course-podcast-v0  
-Railway: https://railway.com/project/2ba14765-a12e-41de-bbcf-e4756d4922a9  
+Railway: https://railway.com/project/e0557607  
 RSS Feed: https://course-podcast-v0-production.up.railway.app/feed.xml
 
 ---
@@ -48,7 +48,7 @@ Tell Claude "kill the podcast" (or call `POST /api/settings/active { active: fal
 If the RSS feed was submitted to Google Podcasts, Pocket Casts, Overcast, or others, each has its own removal process — typically a "Remove podcast" option in their respective dashboard or a support request with your RSS URL.
 
 ### Step 5 — Delete the Railway service
-1. Go to [railway.com/project/2ba14765-a12e-41de-bbcf-e4756d4922a9](https://railway.com/project/2ba14765-a12e-41de-bbcf-e4756d4922a9)
+1. Go to [railway.com/project/e0557607](https://railway.com/project/e0557607)
 2. Click the service → **Settings** → **Delete Service**
 3. This takes down the app, the RSS feed, and all audio URLs immediately. Any podcast app that tries to fetch the feed will get a 404.
 
@@ -70,7 +70,7 @@ The full Cowork-based episode workflow — topic briefing, Adam interview, scrip
 
 ---
 
-## Fallback Cron Logic
+## Cron Behavior
 
 The server runs a daily check at 9:00 AM Pacific. It generates a Megan-only episode automatically if:
 - Adam has not appeared in a `dialogue` episode for **more than 7 days**, AND
@@ -79,6 +79,23 @@ The server runs a daily check at 9:00 AM Pacific. It generates a Megan-only epis
 This keeps the show alive during gaps. The cron respects the kill switch — it skips silently if the show is inactive.
 
 ---
+
+## Authentication (added April 2026)
+
+The website is protected by password + TOTP (MFA). The RSS feed and audio files remain public for Apple Podcasts.
+
+- **Login URL:** https://course-podcast-v0-production.up.railway.app/login
+- **Credentials:** `APP_PASSWORD` env var + TOTP code from Authy
+- **TOTP manual key (Authy backup):** `EAURM6QGIUMD6KIK`
+- **Library:** `otplib@12.0.1` (pinned exact — v13 is ESM-only and breaks CommonJS)
+- **Setup URL** (already used, one-time): `/setup`
+
+### Security changes summary
+- All routes require auth except `/feed.xml`, `/audio/*`, and image files
+- CORS locked to `BASE_URL` env var
+- Rate limiting on generation endpoints: 5 requests/hour/IP
+- `/api/config` removed (was exposing env var names)
+- URL validation on `/api/contributed`
 
 ## Environment Variables
 
@@ -91,3 +108,5 @@ This keeps the show alive during gaps. The cron respects the kill switch — it 
 | `PORT` | Server port (default: 3000) |
 | `DATA_DIR` | SQLite + audio storage path (must be on persistent volume) |
 | `AUDIO_DIR` | Audio file storage path |
+| `SESSION_SECRET` | Secret for express-session (set in Railway) |
+| `ADMIN_PASSWORD` | Website login password (set in Railway) |
