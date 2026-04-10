@@ -504,7 +504,7 @@ app.get('/feed.xml', (req, res) => {
   xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
   xmlns:content="http://purl.org/rss/modules/content/">
   <channel>
-    <title>Course Briefing â Adam Rosenzweig</title>
+    <title>Course Briefing &#x2013; Adam Rosenzweig</title>
 <description>Daily AI-generated briefings on the state of intimate technology and social impact strategy for commercial tech companies.</description>    <link>${BASE_URL}</link>
     <language>en-us</language>
     <itunes:author>Adam Rosenzweig</itunes:author>
