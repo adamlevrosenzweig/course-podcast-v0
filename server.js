@@ -215,7 +215,7 @@ Return ONLY a valid JSON array of source objects. No other text.`;
       const recentTitles = db.prepare('SELECT title FROM episodes ORDER BY number DESC LIMIT 10').all().map(r => r.title).filter(Boolean);
       const recentTitlesBlock = recentTitles.length ? '\nRecent episode titles (do NOT reuse these themes or framings):\n' + recentTitles.map(t => '- ' + t).join('\n') + '\n' : '';
 
-      const scriptPrompt = `You are the co-host of "Human in the Loop," a daily podcast on the innovations, policies, and ideas shaping society. The show is co-produced by Adam Rosenzweig — a lecturer at UC Berkeley's Haas School of Business — and Claude, an AI made by Anthropic. Adam curates the sources and shapes the editorial direction; you write the script.
+      const scriptPrompt = `You are the co-host of "The Overhang," a daily podcast on the innovations, policies, and ideas shaping society. The show is co-produced by Adam Rosenzweig — a lecturer at UC Berkeley's Haas School of Business — and Claude, an AI made by Anthropic. Adam curates the sources and shapes the editorial direction; you write the script.
 
 Adam teaches two courses at Haas that inform the show's perspective:
 - **Intimate Technology** — how technology mediates human intimacy, vulnerability, and connection
@@ -513,7 +513,7 @@ app.get('/feed.xml', (req, res) => {
   xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
   xmlns:content="http://purl.org/rss/modules/content/">
   <channel>
-    <title>Human in the Loop</title>
+    <title>The Overhang</title>
 <description>Daily AI-generated briefings on the state of intimate technology and social impact strategy for commercial tech companies.</description>    <link>${BASE_URL}</link>
     <language>en-us</language>
     <itunes:author>Adam Rosenzweig</itunes:author>
