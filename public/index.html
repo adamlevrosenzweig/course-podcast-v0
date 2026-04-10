@@ -1139,7 +1139,7 @@ function SettingsPage() {
 
   useEffect(() => {
     Promise.all([
-      apiFetch('/api/config'),
+      Promise.resolve(null),
       apiFetch('/api/voices').catch(() => [])
     ]).then(([cfg, vcs]) => {
       setConfig(cfg);

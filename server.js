@@ -8,6 +8,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const session = require('express-session');
 const { authenticator } = require('otplib');
 const QRCode = require('qrcode');
+const rateLimit = require('express-rate-limit');
 const db = require('./database');
 const cron = require('node-cron');
 
@@ -37,7 +38,10 @@ function isShowActive() {
 
 // ─── APP SETUP ───────────────────────────────────────────────────────────────
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.BASE_URL || 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false }));
 app.use(session({
@@ -228,6 +232,14 @@ app.get('/api/contributed', (req, res) => {
 app.post('/api/contributed', (req, res) => {
   const { url, note } = req.body;
   if (!url) return res.status(400).json({ error: 'url required' });
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return res.status(400).json({ error: 'URL must start with http:// or https://' });
+    }
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL — must be a valid http:// or https:// address' });
+  }
   const result = db.prepare('INSERT INTO contributed_urls (url, note) VALUES (?, ?)').run(url, note || null);
   res.json(db.prepare('SELECT * FROM contributed_urls WHERE id = ?').get(result.lastInsertRowid));
 });
@@ -278,6 +290,14 @@ app.post('/api/episodes/import', (req, res) => {
 
 // ─── EPISODE GENERATION ──────────────────────────────────────────────────────
 
+const generationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many generation requests from this IP — try again in an hour.' }
+});
+
 // In-memory job store for async generation
 const generationJobs = {};
 
@@ -288,7 +308,7 @@ app.get('/api/episodes/generate/status', (req, res) => {
   res.json(latest);
 });
 
-app.post('/api/episodes/generate', async (req, res) => {
+app.post('/api/episodes/generate', generationLimiter, async (req, res) => {
   if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
   if (!isShowActive()) return res.status(403).json({ error: 'Show is currently inactive.' });
 
@@ -534,7 +554,7 @@ app.get('/api/episodes/:id/audio/status', (req, res) => {
   res.json(job);
 });
 
-app.post('/api/episodes/:id/audio', async (req, res) => {
+app.post('/api/episodes/:id/audio', generationLimiter, async (req, res) => {
   if (!ELEVENLABS_API_KEY) return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
   if (!ELEVENLABS_VOICE_ID) return res.status(500).json({ error: 'ELEVENLABS_VOICE_ID not configured' });
   if (!isShowActive()) return res.status(403).json({ error: 'Show is currently inactive.' });
@@ -661,13 +681,6 @@ app.get('/api/voices', async (req, res) => {
   }
 });
 
-app.get('/api/config', (req, res) => {
-  res.json({
-    voice_id: ELEVENLABS_VOICE_ID,
-    has_anthropic: !!ANTHROPIC_API_KEY,
-    has_elevenlabs: !!ELEVENLABS_API_KEY
-  });
-});
 
 // ─── RSS FEED (Apple Podcasts compatible) ────────────────────────────────────
 
