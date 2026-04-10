@@ -98,7 +98,7 @@ app.post('/login', (req, res) => {
   }
 
   const passwordOk = password === adminPassword;
-  const totpOk = speakeasy.totp.verify({ secret: totpRow.value, encoding: 'base32', token: totp, window: 1 });
+  const totpOk = authenticator.verify({ token: totp, secret: totpRow.value });
 
   if (!passwordOk || !totpOk) {
     return res.send(LOGIN_PAGE('Invalid password or authenticator code.'));
@@ -114,10 +114,10 @@ app.get('/setup', async (req, res) => {
     return res.redirect('/login');
   }
 
-  const secret = speakeasy.generateSecret({ name: 'The Overhang' }).base32;
+  const secret = authenticator.generateSecret();
   db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('totp_secret', ?)").run(secret);
 
-  const otpauthUrl = speakeasy.otpauthURL({ secret, label: 'The Overhang', issuer: 'The Overhang', encoding: 'base32' });
+  const otpauthUrl = authenticator.keyuri('admin', 'The Overhang', secret);
   const qrDataUrl = await QRCode.toDataURL(otpauthUrl);
 
   res.send(`<!DOCTYPE html>
