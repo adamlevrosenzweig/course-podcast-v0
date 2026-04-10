@@ -533,7 +533,7 @@ app.get('/feed.xml', (req, res) => {
 
 // âââ CATCH-ALL âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.set('Content-Type', 'text/html; charset=utf-8'); res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 
