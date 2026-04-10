@@ -514,7 +514,7 @@ app.get('/feed.xml', (req, res) => {
   xmlns:content="http://purl.org/rss/modules/content/">
   <channel>
     <title>The Overhang</title>
-<description>Daily AI-generated briefings on the state of intimate technology and social impact strategy for commercial tech companies.</description>    <link>${BASE_URL}</link>
+<description>The overhang is the space between what technology can do and what society has figured out how to handle. Reported by Adam Rosenzweig, written with Claude.</description>    <link>${BASE_URL}</link>
     <language>en-us</language>
     <itunes:author>Adam Rosenzweig</itunes:author>
     <itunes:email>adam.lev.rosenzweig@gmail.com</itunes:email>
