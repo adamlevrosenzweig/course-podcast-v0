@@ -5,6 +5,9 @@ const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
 const Anthropic = require('@anthropic-ai/sdk');
+const session = require('express-session');
+const { authenticator } = require('otplib');
+const QRCode = require('qrcode');
 const db = require('./database');
 const cron = require('node-cron');
 
@@ -32,6 +35,148 @@ function isShowActive() {
   return !row || row.value === '1';
 }
 
+// ─── APP SETUP ───────────────────────────────────────────────────────────────
+
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: false }));
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'change-me-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { httpOnly: true }
+}));
+
+// ─── AUTH ROUTES (always public) ─────────────────────────────────────────────
+
+const LOGIN_PAGE = (error = '') => `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login — The Overhang Admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 380px; margin: 100px auto; padding: 0 24px; color: #111; }
+    h1 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1.75rem; }
+    label { display: block; font-size: 0.8rem; font-weight: 500; margin-bottom: 4px; color: #555; }
+    input { display: block; width: 100%; padding: 8px 10px; margin-bottom: 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; }
+    input:focus { outline: none; border-color: #888; }
+    button { width: 100%; padding: 9px; background: #111; color: #fff; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; margin-top: 4px; }
+    button:hover { background: #333; }
+    .error { background: #fff0f0; border: 1px solid #f99; color: #c00; border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; margin-bottom: 14px; }
+  </style>
+</head>
+<body>
+  <h1>The Overhang Admin</h1>
+  ${error ? `<div class="error">${error}</div>` : ''}
+  <form method="post" action="/login">
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" required autofocus>
+    <label for="totp">Authenticator code</label>
+    <input type="text" id="totp" name="totp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="6-digit code" required autocomplete="one-time-code">
+    <button type="submit">Log in</button>
+  </form>
+</body>
+</html>`;
+
+app.get('/login', (req, res) => {
+  if (req.session?.authenticated) return res.redirect('/');
+  res.send(LOGIN_PAGE());
+});
+
+app.post('/login', (req, res) => {
+  const { password, totp } = req.body;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword) {
+    return res.send(LOGIN_PAGE('ADMIN_PASSWORD env var is not set.'));
+  }
+
+  const totpRow = db.prepare("SELECT value FROM settings WHERE key = 'totp_secret'").get();
+  if (!totpRow) {
+    return res.send(LOGIN_PAGE('TOTP not configured. Visit <a href="/setup">/setup</a> first.'));
+  }
+
+  const passwordOk = password === adminPassword;
+  const totpOk = authenticator.verify({ token: totp, secret: totpRow.value });
+
+  if (!passwordOk || !totpOk) {
+    return res.send(LOGIN_PAGE('Invalid password or authenticator code.'));
+  }
+
+  req.session.authenticated = true;
+  res.redirect('/');
+});
+
+app.get('/setup', async (req, res) => {
+  const existing = db.prepare("SELECT value FROM settings WHERE key = 'totp_secret'").get();
+  if (existing) {
+    return res.redirect('/login');
+  }
+
+  const secret = authenticator.generateSecret();
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('totp_secret', ?)").run(secret);
+
+  const otpauthUrl = authenticator.keyuri('admin', 'The Overhang', secret);
+  const qrDataUrl = await QRCode.toDataURL(otpauthUrl);
+
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TOTP Setup — The Overhang Admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 420px; margin: 80px auto; padding: 0 24px; color: #111; }
+    h1 { font-size: 1.1rem; font-weight: 600; }
+    p { font-size: 0.9rem; color: #444; line-height: 1.5; }
+    img { display: block; margin: 20px 0; border: 1px solid #eee; border-radius: 8px; }
+    code { font-family: monospace; background: #f5f5f5; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; word-break: break-all; }
+    a { color: #111; }
+  </style>
+</head>
+<body>
+  <h1>Set up authenticator</h1>
+  <p>Scan this QR code with Authy or another TOTP app. This page is shown only once — once you scan it, the secret is saved.</p>
+  <img src="${qrDataUrl}" alt="TOTP QR Code" width="200" height="200">
+  <p>Manual key: <code>${secret}</code></p>
+  <p><a href="/login">Go to login &rarr;</a></p>
+</body>
+</html>`);
+});
+
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => res.redirect('/login'));
+});
+
+// ─── AUTH MIDDLEWARE ──────────────────────────────────────────────────────────
+
+app.use((req, res, next) => {
+  if (req.session?.authenticated) return next();
+  const p = req.path;
+  if (p === '/feed.xml') return next();
+  if (p.startsWith('/audio/')) return next();
+  if (p === '/login' || p === '/setup' || p === '/logout') return next();
+  // Allow static image assets referenced by RSS readers (cover art, favicon)
+  if (/\.(png|jpg|jpeg|ico|svg|webp)$/i.test(p)) return next();
+  if (req.accepts('html')) return res.redirect('/login');
+  res.status(401).json({ error: 'Unauthorized' });
+});
+
+// ─── STATIC FILES ────────────────────────────────────────────────────────────
+
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    }
+  }
+}));
+app.use('/audio', express.static(AUDIO_DIR));
+
+// ─── KILL SWITCH ─────────────────────────────────────────────────────────────
+
 app.get('/api/settings', (req, res) => {
   res.json({ show_active: isShowActive() });
 });
@@ -42,17 +187,6 @@ app.post('/api/settings/active', (req, res) => {
   console.log(`[settings] show_active set to ${active ? 'true' : 'false'}`);
   res.json({ ok: true, show_active: !!active });
 });
-
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public'), {
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html')) {
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    }
-  }
-}));
-app.use('/audio', express.static(AUDIO_DIR));
 
 // ─── THEMES ──────────────────────────────────────────────────────────────────
 
@@ -290,10 +424,12 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 - Have a clear narrative thread that weaves stories together, especially where they span both courses
 - Explicitly name the conceptual connections between stories when relevant
 - Open with a brief orienting sentence about today's themes, not a generic intro
-- Close with a brief forward-looking thought or question to sit with
+- Close with a brief forward-looking thought or question to sit with, before the sign-off
 - Reference sources naturally by name/outlet, not by number
+- Whenever you mention a specific statistic, finding, or direct quote, cite the outlet name and author (if known) inline in natural spoken language — for example, "according to Sarah Zhang writing in The Atlantic" or "a 2024 study in Nature found"
 - Do NOT include any host introduction or show intro — that is handled separately and will be prepended. Begin immediately with the episode content.
 - Do NOT start with "Welcome" or "Hello" — open in medias res with a brief orienting sentence about today's themes
+- End the script with a brief sign-off paragraph (2–4 sentences). It should: thank the listener for tuning in; transparently credit the tech stack — this script was written with Claude by Anthropic, the voice is Megan via ElevenLabs, and the show is hosted on Railway; remind listeners to verify sources independently since the show isn't infallible; and invite them to follow the podcast and leave a comment if today's episode sparked something. The sign-off should feel like a warm, natural Megan outro — brief, genuine, and varied slightly each episode rather than identical every time.
 
 **Tone and intellectual stance — this is critical:**
 - Be neither techno-optimist nor techno-pessimist. Do not editorialize in either direction.
@@ -611,10 +747,10 @@ app.get('*', (req, res) => {
 // This keeps the show alive during gaps without requiring Adam's involvement.
 
 cron.schedule('0 9 * * *', async () => {
-  console.log('[cron] Running fallback check at', new Date().toISOString());
+  console.log('[fallback-cron] Running fallback check at', new Date().toISOString());
 
   if (!isShowActive()) {
-    console.log('[cron] Show inactive, skipping.');
+    console.log('[fallback-cron] Show inactive, skipping.');
     return;
   }
 
@@ -632,32 +768,32 @@ cron.schedule('0 9 * * *', async () => {
     ? (now - new Date(lastAny.d)) / (1000 * 60 * 60 * 24)
     : 999;
 
-  console.log(`[cron] Days since dialogue: ${daysSinceDialogue.toFixed(1)}, days since any episode: ${daysSinceAny.toFixed(1)}`);
+  console.log(`[fallback-cron] Days since dialogue: ${daysSinceDialogue.toFixed(1)}, days since any episode: ${daysSinceAny.toFixed(1)}`);
 
   if (daysSinceDialogue <= 7 || daysSinceAny <= 3) {
-    console.log('[cron] Fallback not needed, skipping.');
+    console.log('[fallback-cron] Fallback not needed, skipping.');
     return;
   }
 
-  console.log('[cron] Fallback triggered — generating Megan-only episode.');
+  console.log('[fallback-cron] Fallback triggered — generating Megan-only episode.');
 
   const port = process.env.PORT || 3000;
   const base = `http://localhost:${port}`;
 
   try {
     await axios.post(`${base}/api/episodes/generate`, { episode_type: 'megan_only' });
-    console.log('[cron] Fallback generation started, polling...');
+    console.log('[fallback-cron] Fallback generation started, polling...');
 
     let episodeId = null;
     const genDeadline = Date.now() + 10 * 60 * 1000;
     while (Date.now() < genDeadline) {
       await new Promise(r => setTimeout(r, 15000));
       const { data } = await axios.get(`${base}/api/episodes/generate/status`);
-      console.log('[cron] Generation status:', data.status, data.step || '');
-      if (data.status === 'error') { console.error('[cron] Generation failed:', data.error); return; }
+      console.log('[fallback-cron] Generation status:', data.status, data.step || '');
+      if (data.status === 'error') { console.error('[fallback-cron] Generation failed:', data.error); return; }
       if (data.status === 'complete') { episodeId = data.episodeId; break; }
     }
-    if (!episodeId) { console.error('[cron] Generation timed out.'); return; }
+    if (!episodeId) { console.error('[fallback-cron] Generation timed out.'); return; }
 
     await axios.post(`${base}/api/episodes/${episodeId}/audio`, {});
 
@@ -665,17 +801,77 @@ cron.schedule('0 9 * * *', async () => {
     while (Date.now() < audioDeadline) {
       await new Promise(r => setTimeout(r, 20000));
       const { data } = await axios.get(`${base}/api/episodes/${episodeId}`);
-      if (data.audio_filename) { console.log('[cron] Fallback audio ready:', data.audio_filename); return; }
+      if (data.audio_filename) { console.log('[fallback-cron] Fallback audio ready:', data.audio_filename); return; }
     }
-    console.error('[cron] Audio generation timed out.');
+    console.error('[fallback-cron] Audio generation timed out.');
   } catch (err) {
-    console.error('[cron] Fallback cron failed:', err.message);
+    console.error('[fallback-cron] Fallback cron failed:', err.message);
   }
 }, {
   timezone: 'America/Los_Angeles'
 });
 
 console.log('[cron] Megan-only fallback cron scheduled: 9:00 AM Pacific daily');
+
+// ─── DAILY EPISODE CRON ───────────────────────────────────────────────────────
+// Runs every morning at 7:00 AM Pacific. Generates a fresh Megan-only episode
+// unless one already exists for today.
+
+cron.schedule('0 7 * * *', async () => {
+  console.log('[daily-cron] Running daily episode generation at', new Date().toISOString());
+
+  if (!isShowActive()) {
+    console.log('[daily-cron] Show inactive, skipping.');
+    return;
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  const existing = db.prepare('SELECT id FROM episodes WHERE date = ?').get(today);
+  if (existing) {
+    console.log(`[daily-cron] Episode already exists for ${today} (id=${existing.id}), skipping.`);
+    return;
+  }
+
+  const port = process.env.PORT || 3000;
+  const base = `http://localhost:${port}`;
+
+  try {
+    console.log('[daily-cron] No episode for today — starting generation...');
+    await axios.post(`${base}/api/episodes/generate`, { episode_type: 'megan_only' });
+
+    let episodeId = null;
+    const genDeadline = Date.now() + 10 * 60 * 1000;
+    while (Date.now() < genDeadline) {
+      await new Promise(r => setTimeout(r, 15000));
+      const { data } = await axios.get(`${base}/api/episodes/generate/status`);
+      console.log('[daily-cron] Generation status:', data.status, data.step || '');
+      if (data.status === 'error') { console.error('[daily-cron] Generation failed:', data.error); return; }
+      if (data.status === 'complete') { episodeId = data.episodeId; break; }
+    }
+    if (!episodeId) { console.error('[daily-cron] Generation timed out after 10 minutes.'); return; }
+
+    console.log(`[daily-cron] Episode ${episodeId} generated. Starting audio synthesis...`);
+    await axios.post(`${base}/api/episodes/${episodeId}/audio`, {});
+
+    const audioDeadline = Date.now() + 5 * 60 * 1000;
+    while (Date.now() < audioDeadline) {
+      await new Promise(r => setTimeout(r, 20000));
+      const { data } = await axios.get(`${base}/api/episodes/${episodeId}`);
+      if (data.audio_filename) {
+        console.log(`[daily-cron] Audio ready: ${data.audio_filename}`);
+        return;
+      }
+      console.log('[daily-cron] Waiting for audio...');
+    }
+    console.error('[daily-cron] Audio generation timed out after 5 minutes.');
+  } catch (err) {
+    console.error('[daily-cron] Daily cron failed:', err.message);
+  }
+}, {
+  timezone: 'America/Los_Angeles'
+});
+
+console.log('[cron] Daily episode cron scheduled: 7:00 AM Pacific daily');
 
 app.listen(PORT, () => {
   console.log(`Podcast Briefing server running on port ${PORT}`);
