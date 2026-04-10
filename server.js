@@ -215,33 +215,42 @@ Return ONLY a valid JSON array of source objects. No other text.`;
       const recentTitles = db.prepare('SELECT title FROM episodes ORDER BY number DESC LIMIT 10').all().map(r => r.title).filter(Boolean);
       const recentTitlesBlock = recentTitles.length ? '\nRecent episode titles (do NOT reuse these themes or framings):\n' + recentTitles.map(t => '- ' + t).join('\n') + '\n' : '';
 
-      const scriptPrompt = `You are the host of a daily podcast briefing for a UC Berkeley Haas professor named Adam. Adam teaches two courses:
+      const scriptPrompt = `You are the co-host of "Human in the Loop," a daily podcast on the innovations, policies, and ideas shaping society. The show is co-produced by Adam Rosenzweig — a lecturer at UC Berkeley's Haas School of Business — and Claude, an AI made by Anthropic. Adam curates the sources and shapes the editorial direction; you write the script.
 
-1. **Intimate Technology** â how technology mediates human intimacy, vulnerability, and connection
-2. **Social Impact Strategy in Commercial Tech** â how commercial tech companies navigate social impact, intentionally and otherwise
+Adam teaches two courses at Haas that inform the show's perspective:
+- **Intimate Technology** — how technology mediates human intimacy, vulnerability, and connection
+- **Social Impact Strategy in Commercial Tech** — how commercial tech companies navigate social impact, intentionally and otherwise
 
-Both courses share territory: how technology affects vulnerable populations, how business models shape social outcomes, and where ethics and commercial incentives collide.
+When a story is directly relevant to one of these courses, you may note the connection briefly and in plain language (e.g., "This speaks to questions Adam explores in his Intimate Technology course..."). Don't assume the listener is enrolled — give enough context that anyone can follow.
 
-Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today}) using the following sources. The script should:
-- Be 10-50 minutes when read aloud
-- Sound like a well-produced, intelligent daily briefing â natural spoken voice, not a list of summaries
-- Don't be afraid to be academic in your language - Adam values precision and abhors platitudes
-- Have a clear narrative thread that weaves stories together, especially where they span both courses
+Write a podcast script for Episode ${episodeNumber} (${today}) using the following sources. The script should:
+- Be 10–50 minutes when read aloud
+- Sound like a well-produced, intelligent daily briefing — natural spoken voice, not a list of summaries
+- Be rigorous and precise — this audience values intellectual honesty and abhors platitudes
+- Have a clear narrative thread that weaves stories together, especially where they intersect
 - Explicitly name the conceptual connections between stories when relevant
 - Open with a brief orienting sentence about today's themes, not a generic intro
 - Close with a brief forward-looking thought or question to sit with
 - Reference sources naturally by name/outlet, not by number
-- NOT start with "Welcome" or "Hello" â just open with a quick, clever greeting directly to Adam, then in medias res get on with the content
+- NOT start with "Welcome" or "Hello" — open in medias res with a sharp, engaging hook
+
+**Tone and intellectual stance — this is critical:**
+- Be neither techno-optimist nor techno-pessimist. Do not editorialize in either direction.
+- Treat technology as neither inherently liberating nor inherently harmful — its effects depend on design choices, power structures, incentives, and context.
+- When evidence points in multiple directions, say so. Acknowledge genuine uncertainty rather than forcing a clean narrative.
+- Hold companies, researchers, and policymakers accountable to the evidence — but do not assume bad faith where incompetence or structural incentives are a sufficient explanation.
+- Do not moralize. Present tensions and tradeoffs clearly and let the listener draw their own conclusions.
+- The goal is rigorous, intellectually honest analysis — the kind a thoughtful academic would be proud to assign.
 
 Sources for today:
 ${sourcesForScript}
 
 Return a JSON object with exactly two fields:
-- "title": a short, punchy 4-7 word title capturing today's central theme (no quotes, no episode number)${recentTitlesBlock}
+- "title": a short, punchy 4–7 word title capturing today's central theme. Must be distinct from any recent episode titles — avoid reusing the same nouns, framings, or conceptual hooks.${recentTitlesBlock}
 - "script": the full podcast script text
 
 Example format:
-{"title": "When Convenience Becomes Surveillance", "script": "Adam, a quick one today..."}`;
+{"title": "When Convenience Becomes Surveillance", "script": "Three stories this week share an uncomfortable thread..."}`;
       const scriptResponse = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 4000,
@@ -504,7 +513,7 @@ app.get('/feed.xml', (req, res) => {
   xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
   xmlns:content="http://purl.org/rss/modules/content/">
   <channel>
-    <title>Course Briefing &#x2013; Adam Rosenzweig</title>
+    <title>Human in the Loop</title>
 <description>Daily AI-generated briefings on the state of intimate technology and social impact strategy for commercial tech companies.</description>    <link>${BASE_URL}</link>
     <language>en-us</language>
     <itunes:author>Adam Rosenzweig</itunes:author>
