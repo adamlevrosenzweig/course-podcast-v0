@@ -18,12 +18,43 @@ const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '';
 const AUDIO_DIR = process.env.AUDIO_DIR || path.join(__dirname, 'audio');
 if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
+// ─── EPISODE INTROS ──────────────────────────────────────────────────────────
+
+const INTRO_DIALOGUE = `ADAM: "I'm Adam Rosenzweig — I teach courses at UC Berkeley Haas about the social impacts of technology and how we can build a more human-centered future. This show is where I think out loud about what's happening in that space."
+MEGAN: "And I'm Megan — Adam's AI co-host. My voice is synthetic, courtesy of ElevenLabs. The scripts are written by Adam and Claude, grounded in Adam's research, his courses at UC Berkeley Haas, and his own opinions. We verify every source we cite, but we're not infallible — if something sounds off, it's worth checking. Now, here's what's on our radar."`;
+
+const INTRO_MEGAN_ONLY = `"I'm Megan — Adam's AI co-host. My voice is synthetic, courtesy of ElevenLabs. The scripts are written by Adam and Claude, grounded in Adam's research, his courses at UC Berkeley Haas, and his own opinions. Adam's out today, so I'm flying solo — but the content, as always, reflects his thinking. We verify every source we cite, but we're not infallible — if something sounds off, it's worth checking. Now, here's what's on our radar."`;
+
+// ─── KILL SWITCH ─────────────────────────────────────────────────────────────
+
+function isShowActive() {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'show_active'").get();
+  return !row || row.value === '1';
+}
+
+app.get('/api/settings', (req, res) => {
+  res.json({ show_active: isShowActive() });
+});
+
+app.post('/api/settings/active', (req, res) => {
+  const { active } = req.body;
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('show_active', ?)").run(active ? '1' : '0');
+  console.log(`[settings] show_active set to ${active ? 'true' : 'false'}`);
+  res.json({ ok: true, show_active: !!active });
+});
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    }
+  }
+}));
 app.use('/audio', express.static(AUDIO_DIR));
 
-// âââ THEMES ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── THEMES ──────────────────────────────────────────────────────────────────
 
 app.get('/api/themes', (req, res) => {
   const themes = db.prepare('SELECT * FROM themes ORDER BY course, name').all();
@@ -53,7 +84,7 @@ app.delete('/api/themes/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// âââ CONTRIBUTED URLS ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── CONTRIBUTED URLS ────────────────────────────────────────────────────────
 
 app.get('/api/contributed', (req, res) => {
   const urls = db.prepare('SELECT * FROM contributed_urls ORDER BY created_at DESC').all();
@@ -67,7 +98,7 @@ app.post('/api/contributed', (req, res) => {
   res.json(db.prepare('SELECT * FROM contributed_urls WHERE id = ?').get(result.lastInsertRowid));
 });
 
-// âââ EPISODES ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── EPISODES ────────────────────────────────────────────────────────────────
 
 app.get('/api/episodes', (req, res) => {
   const episodes = db.prepare(`
@@ -88,7 +119,30 @@ app.get('/api/episodes/:id', (req, res) => {
   res.json({ ...episode, sources, feedback });
 });
 
-// âââ EPISODE GENERATION ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── EPISODE IMPORT (pre-written script from Cowork interview workflow) ───────
+
+app.post('/api/episodes/import', (req, res) => {
+  if (!isShowActive()) return res.status(403).json({ error: 'Show is currently inactive.' });
+
+  const { script, title, episode_type } = req.body;
+  if (!script) return res.status(400).json({ error: 'script required' });
+
+  const lastEp = db.prepare('SELECT MAX(number) as n FROM episodes').get();
+  const episodeNumber = (lastEp.n || 0) + 1;
+  const today = new Date().toISOString().split('T')[0];
+  const wordCount = script.split(/\s+/).length;
+  const durationEstimate = Math.round(wordCount / 150);
+
+  const result = db.prepare(
+    'INSERT INTO episodes (number, date, title, script, duration_estimate, episode_type) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(episodeNumber, today, title || '', script, durationEstimate, episode_type || 'dialogue');
+
+  const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(result.lastInsertRowid);
+  console.log(`[import] Episode ${episodeNumber} imported (${episode_type || 'dialogue'})`);
+  res.json(episode);
+});
+
+// ─── EPISODE GENERATION ──────────────────────────────────────────────────────
 
 // In-memory job store for async generation
 const generationJobs = {};
@@ -102,18 +156,21 @@ app.get('/api/episodes/generate/status', (req, res) => {
 
 app.post('/api/episodes/generate', async (req, res) => {
   if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  if (!isShowActive()) return res.status(403).json({ error: 'Show is currently inactive.' });
 
   // Check if generation already running
   const running = Object.values(generationJobs).find(j => j.status === 'running');
   if (running) return res.json({ status: 'running', message: 'Generation already in progress' });
 
-  const jobId = Date.now().toString();
-  generationJobs[jobId] = { jobId, status: 'running', step: 'Starting...', startedAt: Date.now() };
+  const episodeType = req.body.episode_type || 'megan_only';
 
-  // Return immediately â client will poll /api/episodes/generate/status
+  const jobId = Date.now().toString();
+  generationJobs[jobId] = { jobId, status: 'running', step: 'Starting...', startedAt: Date.now(), episodeType };
+
+  // Return immediately — client will poll /api/episodes/generate/status
   res.json({ status: 'started', jobId });
 
-  // Run generation in background (fire and forget â client polls status)
+  // Run generation in background (fire and forget — client polls status)
   (async () => {
     const job = generationJobs[jobId];
     try {
@@ -131,25 +188,24 @@ app.post('/api/episodes/generate', async (req, res) => {
       // Step 1: Discover sources
       job.step = 'Searching for sources...';
       const themeList = themes.map(t => `- ${t.name} (${t.course.replace('_', ' ')})`).join('\n');
-   const contributedSection = pendingUrls.length > 0
-  ? `\n\nThe following URLs have been manually contributed and MUST be included as sources:\n${pendingUrls.map(u => `- ${u.url}${u.note ? ` (note: ${u.note})` : ''}`).join('\n')}`
-  : '';
+      const contributedSection = pendingUrls.length > 0
+        ? `\n\nThe following URLs have been manually contributed and MUST be included as sources:\n${pendingUrls.map(u => `- ${u.url}${u.note ? ` (note: ${u.note})` : ''}`).join('\n')}`
+        : '';
 
-const recentFeedback = db.prepare(`
-  SELECT f.note, s.title as source_title, s.url as source_url
-  FROM feedback f
-  LEFT JOIN sources s ON s.id = f.source_id
-  ORDER BY f.created_at DESC
-  LIMIT 20
-`).all();
-
-const feedbackSection = recentFeedback.length > 0
-  ? `\n\nRecent listener feedback to inform your source selection:\n${recentFeedback.map(f =>
-      f.source_title
-        ? `- Re "${f.source_title}" (${f.source_url}): "${f.note}"`
-        : `- General note: "${f.note}"`
-    ).join('\n')}`
-  : '';
+      const recentFeedback = db.prepare(`
+        SELECT f.note, s.title as source_title, s.url as source_url
+        FROM feedback f
+        LEFT JOIN sources s ON s.id = f.source_id
+        ORDER BY f.created_at DESC
+        LIMIT 20
+      `).all();
+      const feedbackSection = recentFeedback.length > 0
+        ? `\n\nRecent listener feedback to inform your source selection:\n${recentFeedback.map(f =>
+            f.source_title
+              ? `- Re "${f.source_title}" (${f.source_url}): "${f.note}"`
+              : `- General note: "${f.note}"`
+          ).join('\n')}`
+        : '';
 
       const discoveryPrompt = `You are a research assistant for a UC Berkeley professor who teaches two courses:
 
@@ -157,23 +213,23 @@ const feedbackSection = recentFeedback.length > 0
 
 2. **Social Impact Strategy in Commercial Tech** (MBA 290T): Explores how commercial technology companies navigate social impact. Key themes include corporate responsibility, ESG and tech, algorithmic harm, technology policy, ethical product design, stakeholder capitalism, social entrepreneurship in tech, the tension between growth and social good.
 
-Search the web for the 8â12 most important, recent stories and articles published in the last 7 days relevant to these topic themes.
+Search the web for the 8–12 most important, recent stories and articles published in the last 7 days relevant to these topic themes.
 
-Source quality requirements â strictly apply these:
+Source quality requirements — strictly apply these:
 - PREFER: established news outlets (NYT, Washington Post, The Guardian, The Atlantic, Wired, Bloomberg, Reuters, AP), academic and research publications (Nature, Science, SSRN preprints, university press releases from R1 institutions), and specialist tech/policy outlets (MIT Technology Review, IEEE Spectrum, rest of world, Politico, The Markup, Slate, The Verge for substantive pieces)
 - PREFER: articles with a named author or byline
 - AVOID: sites without clear author attribution, content farms, SEO aggregators, press-release republishers, sites with excessive advertising, AI-generated content sites
 - AVOID: product announcements or marketing copy disguised as news
 - AVOID: low-domain-authority blogs or sites you've never heard of
-- If a story is only covered by low-quality sources, skip it â wait for a credible outlet to cover it
+- If a story is only covered by low-quality sources, skip it — wait for a credible outlet to cover it
 ${themeList}${contributedSection}${feedbackSection}
 
 For each source found, provide a JSON object with:
 - title: article/story title
 - url: full URL
-- summary: 2â3 sentence summary of the key points
+- summary: 2–3 sentence summary of the key points
 - published_date: approximate date (YYYY-MM-DD format if known)
-- courses: array of applicable courses â use "intimate_tech", "social_impact", or both
+- courses: array of applicable courses — use "intimate_tech", "social_impact", or both
 - contributed: boolean (true only if it was in the manually contributed URLs list)
 
 Return ONLY a valid JSON array of source objects. No other text.`;
@@ -212,27 +268,32 @@ Return ONLY a valid JSON array of source objects. No other text.`;
         `[${i + 1}] ${s.title}\nURL: ${s.url}\nSummary: ${s.summary}\nCourses: ${(s.courses || []).join(', ')}`
       ).join('\n\n');
 
-      const recentTitles = db.prepare('SELECT title FROM episodes ORDER BY number DESC LIMIT 10').all().map(r => r.title).filter(Boolean);
-      const recentTitlesBlock = recentTitles.length ? '\nRecent episode titles (do NOT reuse these themes or framings):\n' + recentTitles.map(t => '- ' + t).join('\n') + '\n' : '';
+      // Fetch recent titles to avoid repetition
+      const recentTitles = db.prepare(
+        'SELECT title FROM episodes ORDER BY number DESC LIMIT 10'
+      ).all().map(r => r.title).filter(Boolean);
+      const recentTitlesBlock = recentTitles.length
+        ? `\nRecent episode titles (do NOT reuse these themes or framings — avoid reusing the same nouns, framings, or conceptual hooks):\n${recentTitles.map(t => `- ${t}`).join('\n')}\n`
+        : '';
 
-      const scriptPrompt = `You are the co-host of "The Overhang," a daily podcast on the innovations, policies, and ideas shaping society. The show is co-produced by Adam Rosenzweig — a lecturer at UC Berkeley's Haas School of Business — and Claude, an AI made by Anthropic. Adam curates the sources and shapes the editorial direction; you write the script.
+      const scriptPrompt = `You are the host of a daily podcast briefing for a UC Berkeley Haas professor named Adam. Adam teaches two courses:
 
-Adam teaches two courses at Haas that inform the show's perspective:
-- **Intimate Technology** — how technology mediates human intimacy, vulnerability, and connection
-- **Social Impact Strategy in Commercial Tech** — how commercial tech companies navigate social impact, intentionally and otherwise
+1. **Intimate Technology** — how technology mediates human intimacy, vulnerability, and connection
+2. **Social Impact Strategy in Commercial Tech** — how commercial tech companies navigate social impact, intentionally and otherwise
 
-When a story is directly relevant to one of these courses, you may note the connection briefly and in plain language (e.g., "This speaks to questions Adam explores in his Intimate Technology course..."). Don't assume the listener is enrolled — give enough context that anyone can follow.
+Both courses share territory: how technology affects vulnerable populations, how business models shape social outcomes, and where ethics and commercial incentives collide.
 
-Write a podcast script for Episode ${episodeNumber} (${today}) using the following sources. The script should:
+Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today}) using the following sources. The script should:
 - Be 10–50 minutes when read aloud
 - Sound like a well-produced, intelligent daily briefing — natural spoken voice, not a list of summaries
-- Be rigorous and precise — this audience values intellectual honesty and abhors platitudes
-- Have a clear narrative thread that weaves stories together, especially where they intersect
+- Don't be afraid to be academic in your language — Adam values precision and abhors platitudes
+- Have a clear narrative thread that weaves stories together, especially where they span both courses
 - Explicitly name the conceptual connections between stories when relevant
 - Open with a brief orienting sentence about today's themes, not a generic intro
 - Close with a brief forward-looking thought or question to sit with
 - Reference sources naturally by name/outlet, not by number
-- NOT start with "Welcome" or "Hello" — open in medias res with a sharp, engaging hook
+- Do NOT include any host introduction or show intro — that is handled separately and will be prepended. Begin immediately with the episode content.
+- Do NOT start with "Welcome" or "Hello" — open in medias res with a brief orienting sentence about today's themes
 
 **Tone and intellectual stance — this is critical:**
 - Be neither techno-optimist nor techno-pessimist. Do not editorialize in either direction.
@@ -250,7 +311,8 @@ Return a JSON object with exactly two fields:
 - "script": the full podcast script text
 
 Example format:
-{"title": "When Convenience Becomes Surveillance", "script": "Three stories this week share an uncomfortable thread..."}`;
+{"title": "When Convenience Becomes Surveillance", "script": "Adam, a quick one today..."}`;
+
       const scriptResponse = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 4000,
@@ -259,24 +321,19 @@ Example format:
       const rawResponse = scriptResponse.content[0].text.trim();
       let script, episodeTitle;
       try {
-        // Strip markdown fences if Claude wrapped it anyway
         const jsonText = rawResponse.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
         const parsed = JSON.parse(jsonText);
         script = parsed.script || rawResponse;
         episodeTitle = parsed.title || '';
       } catch (_) {
-        // Fallback: treat whole response as script
         script = rawResponse;
+
         episodeTitle = '';
       }
 
-      // Format: "#12 Â· Some Pithy Title Â· April 6, 2026"
-      const dateFormatted = new Date(today + 'T12:00:00').toLocaleDateString('en-US', {
-        month: 'long', day: 'numeric', year: 'numeric'
-      });
-      const fullTitle = episodeTitle
-        ? `#${episodeNumber} Â· ${episodeTitle} Â· ${dateFormatted}`
-        : `#${episodeNumber} Â· ${dateFormatted}`;
+      // Prepend fixed intro
+      const intro = episodeType === 'dialogue' ? INTRO_DIALOGUE : INTRO_MEGAN_ONLY;
+      script = `${intro}\n\n${script}`;
 
       const wordCount = script.split(/\s+/).length;
       const durationEstimate = Math.round(wordCount / 150);
@@ -284,8 +341,8 @@ Example format:
       // Step 3: Save to DB
       job.step = 'Saving episode...';
       const epResult = db.prepare(
-        'INSERT INTO episodes (number, date, title, script, duration_estimate) VALUES (?, ?, ?, ?, ?)'
-      ).run(episodeNumber, today, fullTitle, script, durationEstimate);
+        'INSERT INTO episodes (number, date, title, script, duration_estimate, episode_type) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(episodeNumber, today, episodeTitle, script, durationEstimate, episodeType);
       const episodeId = epResult.lastInsertRowid;
 
       const insertSource = db.prepare(
@@ -312,6 +369,14 @@ Example format:
       job.step = 'Done';
       job.episodeId = Number(episodeId);
       job.episode = episode;
+
+      // Compile all scripts into Adam's Context running log
+      try {
+        const { compileScripts } = require('./compile-scripts');
+        compileScripts();
+      } catch (compileErr) {
+        console.error('[compile-scripts] Error during auto-compile:', compileErr.message);
+      }
     } catch (err) {
       console.error('Generation error:', err);
       generationJobs[jobId].status = 'error';
@@ -320,9 +385,9 @@ Example format:
   })();
 });
 
-// âââ AUDIO GENERATION ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── AUDIO GENERATION ────────────────────────────────────────────────────────
 
-// In-memory job store for audio generation (same pattern as episode generation)
+// In-memory job store for audio generation
 const audioJobs = {};
 
 app.get('/api/episodes/:id/audio/status', (req, res) => {
@@ -336,6 +401,7 @@ app.get('/api/episodes/:id/audio/status', (req, res) => {
 app.post('/api/episodes/:id/audio', async (req, res) => {
   if (!ELEVENLABS_API_KEY) return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
   if (!ELEVENLABS_VOICE_ID) return res.status(500).json({ error: 'ELEVENLABS_VOICE_ID not configured' });
+  if (!isShowActive()) return res.status(403).json({ error: 'Show is currently inactive.' });
 
   const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
   if (!episode) return res.status(404).json({ error: 'Episode not found' });
@@ -348,7 +414,7 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
   const jobId = Date.now().toString();
   audioJobs[jobId] = { jobId, episodeId: req.params.id, status: 'running', step: 'Connecting to ElevenLabs...', startedAt: Date.now() };
 
-  // Return immediately â client polls /api/episodes/:id/audio/status
+  // Return immediately — client polls /api/episodes/:id/audio/status
   res.json({ status: 'started', jobId });
 
   (async () => {
@@ -368,7 +434,7 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
         {
           headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
           responseType: 'arraybuffer',
-          timeout: 300000  // 5 min â Railway proxy is bypassed since we returned already
+          timeout: 300000  // 5 min
         }
       );
 
@@ -388,17 +454,17 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
   })();
 });
 
-// âââ SOURCES âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── SOURCES ─────────────────────────────────────────────────────────────────
 
 app.get('/api/sources', (req, res) => {
- const { q, course, episode_id, from_date } = req.query;
+  const { q, course, episode_id, from_date } = req.query;
   let query = `SELECT s.*, e.number as episode_number, e.date as episode_date,
-      COUNT(f.id) as note_count,
-      GROUP_CONCAT(f.note, '|||') as notes
-      FROM sources s
-      LEFT JOIN episodes e ON e.id = s.episode_id
-      LEFT JOIN feedback f ON f.source_id = s.id
-      WHERE 1=1`;
+    COUNT(f.id) as note_count,
+    GROUP_CONCAT(f.note, '|||') as notes
+    FROM sources s
+    LEFT JOIN episodes e ON e.id = s.episode_id
+    LEFT JOIN feedback f ON f.source_id = s.id
+    WHERE 1=1`;
   const params = [];
 
   if (q) {
@@ -409,7 +475,7 @@ app.get('/api/sources', (req, res) => {
     query += ' AND s.courses LIKE ?';
     params.push(`%${course}%`);
   }
-if (episode_id) {
+  if (episode_id) {
     query += ' AND s.episode_id = ?';
     params.push(episode_id);
   }
@@ -421,12 +487,11 @@ if (episode_id) {
   query += ' GROUP BY s.id ORDER BY s.published_date DESC, s.created_at DESC';
   const sources = db.prepare(query).all(...params);
 
-  // Parse courses JSON for each source
   const parsed = sources.map(s => ({ ...s, courses: JSON.parse(s.courses || '[]') }));
   res.json(parsed);
 });
 
-// âââ FEEDBACK ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── FEEDBACK ────────────────────────────────────────────────────────────────
 
 app.get('/api/feedback', (req, res) => {
   const { episode_id, source_id } = req.query;
@@ -446,7 +511,7 @@ app.post('/api/feedback', (req, res) => {
   res.json(db.prepare('SELECT * FROM feedback WHERE id = ?').get(result.lastInsertRowid));
 });
 
-// âââ VOICES (ElevenLabs) âââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── VOICES (ElevenLabs) ─────────────────────────────────────────────────────
 
 app.get('/api/voices', async (req, res) => {
   if (!ELEVENLABS_API_KEY) return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
@@ -468,7 +533,7 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-// âââ RSS FEED (Apple Podcasts compatible) ââââââââââââââââââââââââââââââââââââ
+// ─── RSS FEED (Apple Podcasts compatible) ────────────────────────────────────
 
 app.get('/feed.xml', (req, res) => {
   const BASE_URL = process.env.BASE_URL || `https://${req.headers.host}`;
@@ -476,6 +541,7 @@ app.get('/feed.xml', (req, res) => {
     SELECT * FROM episodes WHERE audio_filename IS NOT NULL ORDER BY number DESC
   `).all();
 
+  // Fix double-encoded UTF-8 characters that can appear in stored strings
   const fixEncoding = (str = '') => str
     .replace(/Â·/g, '·')
     .replace(/â€™/g, '\u2019')
@@ -485,8 +551,10 @@ app.get('/feed.xml', (req, res) => {
     .replace(/â€"/g, '\u2014');
 
   const escXml = (str = '') => fixEncoding(str)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 
   const items = episodes.map(ep => {
     const audioUrl = `${BASE_URL}/audio/${ep.audio_filename}`;
@@ -497,7 +565,7 @@ app.get('/feed.xml', (req, res) => {
     const description = escXml(ep.script ? ep.script.substring(0, 300) + '...' : `Episode ${ep.number}`);
     return `
     <item>
-      <title>${escXml(ep.title || `Episode ${ep.number} â ${ep.date}`)}</title>
+      <title>${escXml(ep.title || `Episode ${ep.number}`)}</title>
       <description>${description}</description>
       <pubDate>${pubDate}</pubDate>
       <enclosure url="${audioUrl}" length="${audioSize}" type="audio/mpeg"/>
@@ -513,14 +581,15 @@ app.get('/feed.xml', (req, res) => {
   xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
   xmlns:content="http://purl.org/rss/modules/content/">
   <channel>
-    <title>The Overhang</title>
-<description>The overhang is the space between what technology can do and what society has figured out how to handle. Reported by Adam Rosenzweig, written with Claude.</description>    <link>${BASE_URL}</link>
+    <title>Course Briefing &#x2013; Adam Rosenzweig</title>
+    <description>Daily AI-generated briefings for Intimate Technology and Social Impact Strategy in Commercial Tech at UC Berkeley Haas.</description>
+    <link>${BASE_URL}</link>
     <language>en-us</language>
     <itunes:author>Adam Rosenzweig</itunes:author>
     <itunes:email>adam.lev.rosenzweig@gmail.com</itunes:email>
     <itunes:category text="Education"/>
-    <itunes:image href="${BASE_URL}/podcast_cover_overhang1.png"/>
-    <image><url>${BASE_URL}/podcast_cover_overhang1.png</url><title>Course Briefing</title><link>${BASE_URL}</link></image>
+    <itunes:image href="${BASE_URL}/podcast_cover_v2.png"/>
+    <image><url>${BASE_URL}/podcast_cover_v2.png</url><title>Course Briefing</title><link>${BASE_URL}</link></image>
     <itunes:explicit>false</itunes:explicit>
     <itunes:type>episodic</itunes:type>
     ${items}
@@ -531,89 +600,84 @@ app.get('/feed.xml', (req, res) => {
   res.send(xml);
 });
 
-// âââ CATCH-ALL âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ─── CATCH-ALL ───────────────────────────────────────────────────────────────
 app.get('*', (req, res) => {
-  res.set('Content-Type', 'text/html; charset=utf-8'); res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// ─── MEGAN-ONLY FALLBACK CRON ────────────────────────────────────────────────
+// Runs daily at 9:00 AM Pacific. Does NOT generate on a fixed schedule.
+// Only fires if Adam hasn't appeared in an episode for >7 days AND
+// no episode of any kind has been published for >3 days.
+// This keeps the show alive during gaps without requiring Adam's involvement.
 
-// âââ DAILY AUTO-GENERATION âââââââââââââââââââââââââââââââââââââââââââââââââââ
-// Runs every day at 7:00 AM Pacific time (UTC-7 in PDT, UTC-8 in PST).
-// node-cron schedules in server local time (UTC on Railway), so we use UTC hours:
-//   7 AM PT (PDT, UTC-7) = 14:00 UTC  |  7 AM PT (PST, UTC-8) = 15:00 UTC
-// To handle both, check the TZ env var or just pick a UTC hour.
-// Railway runs in UTC. To change the time, update CRON_SCHEDULE in env vars.
-// Default: "0 14 * * *"  = 7 AM PDT (summer).  Use "0 15 * * *" in winter.
+cron.schedule('0 9 * * *', async () => {
+  console.log('[cron] Running fallback check at', new Date().toISOString());
 
-const CRON_SCHEDULE = process.env.CRON_SCHEDULE || '0 14 * * *';
-
-cron.schedule(CRON_SCHEDULE, async () => {
-  console.log('[cron] Starting scheduled daily generation at', new Date().toISOString());
-
-  // Skip if already generated today
-  const today = new Date().toISOString().split('T')[0];
-  const existing = db.prepare('SELECT id FROM episodes WHERE date = ?').get(today);
-  if (existing) {
-    console.log('[cron] Episode already exists for today, skipping.');
+  if (!isShowActive()) {
+    console.log('[cron] Show inactive, skipping.');
     return;
   }
 
-  // Reuse the same generation logic as the POST endpoint
-  // by making an internal HTTP request to ourselves
+  const now = new Date();
+
+  const lastDialogue = db.prepare(
+    "SELECT MAX(date) as d FROM episodes WHERE episode_type = 'dialogue'"
+  ).get();
+  const lastAny = db.prepare('SELECT MAX(date) as d FROM episodes').get();
+
+  const daysSinceDialogue = lastDialogue.d
+    ? (now - new Date(lastDialogue.d)) / (1000 * 60 * 60 * 24)
+    : 999;
+  const daysSinceAny = lastAny.d
+    ? (now - new Date(lastAny.d)) / (1000 * 60 * 60 * 24)
+    : 999;
+
+  console.log(`[cron] Days since dialogue: ${daysSinceDialogue.toFixed(1)}, days since any episode: ${daysSinceAny.toFixed(1)}`);
+
+  if (daysSinceDialogue <= 7 || daysSinceAny <= 3) {
+    console.log('[cron] Fallback not needed, skipping.');
+    return;
+  }
+
+  console.log('[cron] Fallback triggered — generating Megan-only episode.');
+
   const port = process.env.PORT || 3000;
   const base = `http://localhost:${port}`;
 
   try {
-    // Step 1: trigger generation
-    await axios.post(`${base}/api/episodes/generate`, {});
-    console.log('[cron] Generation started, polling for completion...');
+    await axios.post(`${base}/api/episodes/generate`, { episode_type: 'megan_only' });
+    console.log('[cron] Fallback generation started, polling...');
 
-    // Step 2: poll until done (10 min timeout)
     let episodeId = null;
     const genDeadline = Date.now() + 10 * 60 * 1000;
     while (Date.now() < genDeadline) {
       await new Promise(r => setTimeout(r, 15000));
       const { data } = await axios.get(`${base}/api/episodes/generate/status`);
       console.log('[cron] Generation status:', data.status, data.step || '');
-      if (data.status === 'error') {
-        console.error('[cron] Generation failed:', data.error);
-        return;
-      }
-      if (data.status === 'complete') {
-        episodeId = data.episodeId;
-        break;
-      }
+      if (data.status === 'error') { console.error('[cron] Generation failed:', data.error); return; }
+      if (data.status === 'complete') { episodeId = data.episodeId; break; }
     }
-    if (!episodeId) {
-      console.error('[cron] Generation timed out after 10 minutes.');
-      return;
-    }
+    if (!episodeId) { console.error('[cron] Generation timed out.'); return; }
 
-    // Step 3: trigger audio generation
-    console.log('[cron] Script complete, triggering audio for episode', episodeId);
     await axios.post(`${base}/api/episodes/${episodeId}/audio`, {});
 
-    // Step 4: poll until audio is ready (5 min timeout)
     const audioDeadline = Date.now() + 5 * 60 * 1000;
     while (Date.now() < audioDeadline) {
       await new Promise(r => setTimeout(r, 20000));
       const { data } = await axios.get(`${base}/api/episodes/${episodeId}`);
-      if (data.audio_filename) {
-        console.log('[cron] Audio ready:', data.audio_filename);
-        return;
-      }
+      if (data.audio_filename) { console.log('[cron] Fallback audio ready:', data.audio_filename); return; }
     }
-    console.error('[cron] Audio generation timed out after 5 minutes.');
+    console.error('[cron] Audio generation timed out.');
   } catch (err) {
-    console.error('[cron] Cron job failed:', err.message);
-  }}, {
-  timezone: 'America/Los_Angeles'  // handles DST automatically
+    console.error('[cron] Fallback cron failed:', err.message);
+  }
+}, {
+  timezone: 'America/Los_Angeles'
 });
 
-console.log(`[cron] Daily generation scheduled: ${CRON_SCHEDULE} (America/Los_Angeles)`);
+console.log('[cron] Megan-only fallback cron scheduled: 9:00 AM Pacific daily');
 
 app.listen(PORT, () => {
   console.log(`Podcast Briefing server running on port ${PORT}`);
 });
-
-

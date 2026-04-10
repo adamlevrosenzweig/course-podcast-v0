@@ -9,6 +9,13 @@ const db = new DatabaseSync(path.join(DATA_DIR, 'briefing.db'));
 
 // WAL mode improves concurrent read performance on supported filesystems
 try { db.exec(`PRAGMA journal_mode = WAL`); } catch (_) {}
+// Migrations
+try { db.exec('ALTER TABLE episodes ADD COLUMN title TEXT'); } catch (_) {}
+try { db.exec("ALTER TABLE episodes ADD COLUMN episode_type TEXT DEFAULT 'megan_only'"); } catch (_) {}
+try { db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`); } catch (_) {}
+try { db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('show_active', '1')`); } catch (_) {}
+try { db.exec(`UPDATE episodes SET title = '#1 | The intimacy industrial complex | April 7, 2026' WHERE number = 1 AND (title IS NULL OR title = '')`); } catch (_) {}
+try { db.exec(`UPDATE episodes SET title = '#2 | Intimacy by algorithm, regulation by lawsuit | April 8, 2026' WHERE number = 2 AND (title IS NULL OR title = '')`); } catch (_) {}
 db.exec(`PRAGMA foreign_keys = ON`);
 
 db.exec(`
@@ -16,7 +23,6 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     number INTEGER UNIQUE,
     date TEXT NOT NULL,
-    title TEXT,
     script TEXT,
     audio_filename TEXT,
     duration_estimate INTEGER,
@@ -67,15 +73,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_feedback_episode ON feedback(episode_id);
 `);
 
-// Migrate existing deployments — add title column if missing
-try { db.exec('ALTER TABLE episodes ADD COLUMN title TEXT'); } catch (_) {}
-
 // Seed default themes if empty
 const themeCount = db.prepare('SELECT COUNT(*) as c FROM themes').get();
 if (themeCount.c === 0) {
   const insertTheme = db.prepare('INSERT INTO themes (name, course, active) VALUES (?, ?, 1)');
 
   const themes = [
+    // Intimate Technology
     { name: 'AI companions and social robots', course: 'intimate_tech' },
     { name: 'Haptic technology and digital touch', course: 'intimate_tech' },
     { name: 'Surveillance capitalism and personal data', course: 'intimate_tech' },
@@ -86,6 +90,8 @@ if (themeCount.c === 0) {
     { name: 'Regulation of intimate technology', course: 'intimate_tech' },
     { name: 'Emotional AI and affective computing', course: 'intimate_tech' },
     { name: 'Mental health apps and digital therapy', course: 'intimate_tech' },
+
+    // Social Impact Strategy
     { name: 'Corporate responsibility in big tech', course: 'social_impact' },
     { name: 'ESG and technology companies', course: 'social_impact' },
     { name: 'Algorithmic harm and accountability', course: 'social_impact' },
@@ -96,6 +102,8 @@ if (themeCount.c === 0) {
     { name: 'AI bias and fairness in automated systems', course: 'social_impact' },
     { name: 'Platform labor and gig economy ethics', course: 'social_impact' },
     { name: 'Digital divide and technology access equity', course: 'social_impact' },
+
+    // Shared
     { name: 'Technology and vulnerable populations', course: 'shared' },
     { name: 'Business models and social harm', course: 'shared' },
     { name: 'Ethics and commercial incentives in tech', course: 'shared' },
