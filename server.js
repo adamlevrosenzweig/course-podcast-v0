@@ -463,7 +463,7 @@ Sources for today:
 ${sourcesForScript}
 
 Return a JSON object with exactly two fields:
-- "title": a short, punchy 4–7 word title capturing today's central theme. Must be distinct from any recent episode titles — avoid reusing the same nouns, framings, or conceptual hooks.${recentTitlesBlock}
+- "title": format exactly as: "#{episodeNumber} - {4-6 word punchy title} - {Month D, YYYY}" (e.g. "#5 - When Algorithms Shape Desire - April 11, 2026"). The middle portion must be distinct from recent titles — avoid reusing the same nouns, framings, or conceptual hooks.${recentTitlesBlock}
 - "script": the full podcast script text
 
 Example format:
