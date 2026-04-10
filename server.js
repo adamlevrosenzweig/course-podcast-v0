@@ -6,8 +6,7 @@ const fs = require('fs');
 const axios = require('axios');
 const Anthropic = require('@anthropic-ai/sdk');
 const session = require('express-session');
-const otplib = require('otplib');
-const authenticator = otplib.authenticator;
+const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const db = require('./database');
 const cron = require('node-cron');
@@ -99,7 +98,7 @@ app.post('/login', (req, res) => {
   }
 
   const passwordOk = password === adminPassword;
-  const totpOk = authenticator.verify({ token: totp, secret: totpRow.value });
+  const totpOk = speakeasy.totp.verify({ secret: totpRow.value, encoding: 'base32', token: totp, window: 1 });
 
   if (!passwordOk || !totpOk) {
     return res.send(LOGIN_PAGE('Invalid password or authenticator code.'));
@@ -115,10 +114,10 @@ app.get('/setup', async (req, res) => {
     return res.redirect('/login');
   }
 
-  const secret = authenticator.generateSecret();
+  const secret = speakeasy.generateSecret({ name: 'The Overhang' }).base32;
   db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('totp_secret', ?)").run(secret);
 
-  const otpauthUrl = authenticator.keyuri('admin', 'The Overhang', secret);
+  const otpauthUrl = speakeasy.otpauthURL({ secret, label: 'The Overhang', issuer: 'The Overhang', encoding: 'base32' });
   const qrDataUrl = await QRCode.toDataURL(otpauthUrl);
 
   res.send(`<!DOCTYPE html>
