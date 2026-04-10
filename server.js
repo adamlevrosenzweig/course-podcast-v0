@@ -467,7 +467,7 @@ Return a JSON object with exactly two fields:
 - "script": the full podcast script text
 
 Example format:
-{"title": "When Convenience Becomes Surveillance", "script": "Adam, a quick one today..."}`;
+{"title": "#5 - When Convenience Becomes Surveillance - April 10, 2026", "script": "Adam, a quick one today..."}`;
 
       const scriptResponse = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
