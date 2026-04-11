@@ -16,6 +16,11 @@ try { db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value 
 try { db.exec(`INSERT OR IGNORE INTO settings (key, value) VALUES ('show_active', '1')`); } catch (_) {}
 try { db.exec(`UPDATE episodes SET title = '#1 | The intimacy industrial complex | April 7, 2026' WHERE number = 1 AND (title IS NULL OR title = '')`); } catch (_) {}
 try { db.exec(`UPDATE episodes SET title = '#2 | Intimacy by algorithm, regulation by lawsuit | April 8, 2026' WHERE number = 2 AND (title IS NULL OR title = '')`); } catch (_) {}
+// Staging: status + publish_at
+try { db.exec("ALTER TABLE episodes ADD COLUMN status TEXT DEFAULT 'published'"); } catch (_) {}
+try { db.exec("ALTER TABLE episodes ADD COLUMN publish_at TEXT"); } catch (_) {}
+// All existing episodes are already live — mark them published
+try { db.exec("UPDATE episodes SET status = 'published' WHERE status IS NULL OR status = ''"); } catch (_) {}
 db.exec(`PRAGMA foreign_keys = ON`);
 
 db.exec(`
