@@ -376,7 +376,7 @@
     .step-dot.active { background: var(--accent); box-shadow: 0 0 6px rgba(200,169,110,0.4); }
     .step-dot.done { background: var(--impact); }
 
-    /* ââ Mobile bottom nav (hidden on desktop) ââ */
+    /* ── Mobile bottom nav (hidden on desktop) ── */
     .mobile-nav { display: none; }
 
     @media (max-width: 680px) {
@@ -487,7 +487,7 @@ function CourseTag({ courses }) {
   return null;
 }
 
-// ââ TODAY PAGE ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── TODAY PAGE ──────────────────────────────────────────────────────────────
 
 function TodayPage({ onNavigate }) {
   const [episodes, setEpisodes] = useState([]);
@@ -521,7 +521,7 @@ function TodayPage({ onNavigate }) {
   async function generate() {
     setGenerating(true);
     setError('');
-    setStatus('Starting generationâ¦');
+    setStatus('Starting generation…');
     try {
       await apiFetch('/api/episodes/generate', { method: 'POST', body: {} });
       // Poll every 3s until done
@@ -538,7 +538,7 @@ function TodayPage({ onNavigate }) {
           setError(job.error || 'Generation failed');
           setStatus('');
         } else {
-          setStatus(job.step || 'Workingâ¦');
+          setStatus(job.step || 'Working…');
         }
       }
     } catch (e) {
@@ -552,7 +552,7 @@ function TodayPage({ onNavigate }) {
     if (!latest) return;
     setGeneratingAudio(true);
     setError('');
-    setStatus('Starting audio generationâ¦');
+    setStatus('Starting audio generation…');
     try {
       await apiFetch(`/api/episodes/${latest.id}/audio`, { method: 'POST', body: {} });
       let done = false;
@@ -568,7 +568,7 @@ function TodayPage({ onNavigate }) {
           setError(job.error || 'Audio generation failed');
           setStatus('');
         } else {
-          setStatus(job.step || 'Generating audioâ¦');
+          setStatus(job.step || 'Generating audio…');
         }
       }
     } catch (e) {
@@ -593,7 +593,7 @@ function TodayPage({ onNavigate }) {
     } catch (e) { setError(e.message); }
   }
 
-  if (loading) return <div style={{padding: '48px', color: 'var(--text-muted)'}}>Loadingâ¦</div>;
+  if (loading) return <div style={{padding: '48px', color: 'var(--text-muted)'}}>Loading…</div>;
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -635,10 +635,10 @@ function TodayPage({ onNavigate }) {
         <>
           <div className="card">
             <div className="card-title" style={{marginBottom: '6px'}}>
-              {latest.title || `Episode ${latest.number} Â· ${latest.date}`}
+              {latest.title || `Episode ${latest.number} · ${latest.date}`}
             </div>
             <div className="card-meta" style={{marginBottom: '14px'}}>
-              {latest.source_count} sources Â· ~{latest.duration_estimate} min Â· {latest.audio_filename ? 'Audio ready' : 'Script ready'}
+              {latest.source_count} sources · ~{latest.duration_estimate} min · {latest.audio_filename ? 'Audio ready' : 'Script ready'}
             </div>
 
             {latest.audio_filename ? (
@@ -647,7 +647,7 @@ function TodayPage({ onNavigate }) {
                 <audio controls src={`/audio/${latest.audio_filename}`} />
                 <div className="audio-actions">
                   <a href={`/audio/${latest.audio_filename}`} download className="btn btn-ghost btn-sm">
-                    â Download MP3
+                    ↓ Download MP3
                   </a>
                   <span style={{fontSize: '12px', color: 'var(--text-muted)'}}>Save to iPhone via Files app</span>
                 </div>
@@ -659,7 +659,7 @@ function TodayPage({ onNavigate }) {
                 disabled={generatingAudio}
                 style={{marginBottom: '8px'}}
               >
-                {generatingAudio ? <><div className="spinner"></div> Generating Audioâ¦</> : 'â¶ Generate Audio'}
+                {generatingAudio ? <><div className="spinner"></div> Generating Audio…</> : '▶ Generate Audio'}
               </button>
             )}
 
@@ -696,7 +696,7 @@ function TodayPage({ onNavigate }) {
               <textarea
                 value={feedbackNote}
                 onChange={e => setFeedbackNote(e.target.value)}
-                placeholder="Ask a question about a source, note something to follow up onâ¦"
+                placeholder="Ask a question about a source, note something to follow up on…"
               />
             </div>
             {latest.sources?.length > 0 && (
@@ -728,7 +728,7 @@ function TodayPage({ onNavigate }) {
   );
 }
 
-// ââ SOURCE CARD âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── SOURCE CARD ─────────────────────────────────────────────────────────────
 
 function getOutlet(url) {
   if (!url) return null;
@@ -775,11 +775,11 @@ function SourceCard({ source }) {
       {(outlet || source.published_date || source.url) && (
         <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'8px', marginBottom:'4px', lineHeight:'1.5'}}>
           <span style={{fontStyle:'italic'}}>
-            {[outlet, source.published_date].filter(Boolean).join(' Â· ')}
+            {[outlet, source.published_date].filter(Boolean).join(' · ')}
           </span>
           {source.url && (
-            <span> Â· <a href={source.url} target="_blank" rel="noopener" style={{color:'var(--text-muted)', wordBreak:'break-all'}}>
-              {source.url.length > 70 ? source.url.slice(0, 70) + 'â¦' : source.url}
+            <span> · <a href={source.url} target="_blank" rel="noopener" style={{color:'var(--text-muted)', wordBreak:'break-all'}}>
+              {source.url.length > 70 ? source.url.slice(0, 70) + '…' : source.url}
             </a></span>
           )}
         </div>
@@ -806,10 +806,10 @@ function SourceCard({ source }) {
               type="text"
               value={note}
               onChange={e => setNote(e.target.value)}
-              placeholder="Add a note about this sourceâ¦"
+              placeholder="Add a note about this source…"
               style={{flex: 1}}
             />
-            <button type="submit" className="btn btn-ghost btn-sm">{saved ? 'â' : 'Save'}</button>
+            <button type="submit" className="btn btn-ghost btn-sm">{saved ? '✓' : 'Save'}</button>
           </form>
         </div>
       )}
@@ -817,7 +817,7 @@ function SourceCard({ source }) {
   );
 }
 
-// ââ ARCHIVE PAGE âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── ARCHIVE PAGE ─────────────────────────────────────────────────────────────
 
 function ArchivePage() {
   const [episodes, setEpisodes] = useState([]);
@@ -833,21 +833,21 @@ function ArchivePage() {
     setSelected(full);
   }
 
-  if (loading) return <div style={{padding:'48px',color:'var(--text-muted)'}}>Loadingâ¦</div>;
+  if (loading) return <div style={{padding:'48px',color:'var(--text-muted)'}}>Loading…</div>;
 
   if (selected) return (
     <div>
       <button className="btn btn-ghost btn-sm" onClick={() => setSelected(null)} style={{marginBottom:'24px'}}>
-        â All Episodes
+        ← All Episodes
       </button>
-      <div className="card-meta">Episode {selected.number} Â· {selected.date}</div>
+      <div className="card-meta">Episode {selected.number} · {selected.date}</div>
       <h1 className="page-title" style={{marginBottom:'24px'}}>Episode {selected.number}</h1>
 
       {selected.audio_filename && (
         <div className="audio-player">
           <audio controls src={`/audio/${selected.audio_filename}`} />
           <div className="audio-actions">
-            <a href={`/audio/${selected.audio_filename}`} download className="btn btn-ghost btn-sm">â Download</a>
+            <a href={`/audio/${selected.audio_filename}`} download className="btn btn-ghost btn-sm">↓ Download</a>
           </div>
         </div>
       )}
@@ -868,14 +868,14 @@ function ArchivePage() {
         <div key={ep.id} className="ep-item" onClick={() => selectEp(ep)}>
           <span className="ep-num">#{ep.number}</span>
           <span className="ep-title">{ep.title || ep.date}</span>
-          <span className="ep-meta">{ep.source_count} sources Â· ~{ep.duration_estimate} min</span>
+          <span className="ep-meta">{ep.source_count} sources · ~{ep.duration_estimate} min</span>
         </div>
       ))}
     </div>
   );
 }
 
-// ââ SOURCES PAGE âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── SOURCES PAGE ─────────────────────────────────────────────────────────────
 
 function getFromDate(range) {
   if (!range) return null;
@@ -914,10 +914,10 @@ function SourcesPage() {
 
       <div style={{display:'flex', gap:'12px', marginBottom:'24px', flexWrap:'wrap'}}>
         <div className="search-bar" style={{flex:1}}>
-          <span className="search-icon">â</span>
+          <span className="search-icon">⌕</span>
           <input
             type="text"
-            placeholder="Search titles, summaries, URLsâ¦"
+            placeholder="Search titles, summaries, URLs…"
             value={q}
             onChange={e => setQ(e.target.value)}
           />
@@ -935,14 +935,14 @@ function SourcesPage() {
         </select>
       </div>
 
-      {loading && <div style={{color:'var(--text-muted)',fontSize:'13px'}}>Loadingâ¦</div>}
+      {loading && <div style={{color:'var(--text-muted)',fontSize:'13px'}}>Loading…</div>}
       {!loading && sources.length === 0 && <div className="empty-state">No sources found.</div>}
       {!loading && sources.map(s => <SourceCard key={s.id} source={s} />)}
     </div>
   );
 }
 
-// ââ CONTRIBUTE PAGE ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── CONTRIBUTE PAGE ──────────────────────────────────────────────────────────
 
 function ContributePage() {
   const [url, setUrl] = useState('');
@@ -984,7 +984,7 @@ function ContributePage() {
               type="url"
               value={url}
               onChange={e => setUrl(e.target.value)}
-              placeholder="https://â¦"
+              placeholder="https://…"
               required
             />
           </div>
@@ -993,11 +993,11 @@ function ContributePage() {
             <textarea
               value={note}
               onChange={e => setNote(e.target.value)}
-              placeholder="Why this source matters, which course it connects to, anything to tell Claudeâ¦"
+              placeholder="Why this source matters, which course it connects to, anything to tell Claude…"
             />
           </div>
           <button type="submit" className="btn btn-primary">
-            {saved ? 'â Added' : 'Add to Queue'}
+            {saved ? '✓ Added' : 'Add to Queue'}
           </button>
           {error && <div className="status-line error">{error}</div>}
         </form>
@@ -1032,7 +1032,7 @@ function ContributePage() {
   );
 }
 
-// ââ THEMES PAGE ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── THEMES PAGE ──────────────────────────────────────────────────────────────
 
 function ThemesPage() {
   const [themes, setThemes] = useState([]);
@@ -1092,14 +1092,14 @@ function ThemesPage() {
                   onClick={() => toggle(t)}
                   title={t.active ? 'Disable' : 'Enable'}
                 >
-                  {t.active && <span style={{color:'#0f0f0d',fontSize:'10px',fontWeight:'bold'}}>â</span>}
+                  {t.active && <span style={{color:'#0f0f0d',fontSize:'10px',fontWeight:'bold'}}>✓</span>}
                 </div>
                 <span className="theme-name">{t.name}</span>
                 <button
                   onClick={() => deleteTheme(t.id)}
                   style={{background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'14px',padding:'0 2px',lineHeight:1}}
                   title="Delete"
-                >Ã</button>
+                >×</button>
               </div>
             ))}
           </div>
@@ -1113,7 +1113,7 @@ function ThemesPage() {
             type="text"
             value={newName}
             onChange={e => setNewName(e.target.value)}
-            placeholder="Theme nameâ¦"
+            placeholder="Theme name…"
             style={{flex:2,minWidth:'200px'}}
           />
           <select value={newCourse} onChange={e => setNewCourse(e.target.value)} style={{flex:1,minWidth:'160px'}}>
@@ -1129,7 +1129,7 @@ function ThemesPage() {
   );
 }
 
-// ââ SETTINGS PAGE ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── SETTINGS PAGE ────────────────────────────────────────────────────────────
 
 function SettingsPage() {
   const [voices, setVoices] = useState([]);
@@ -1152,7 +1152,7 @@ function SettingsPage() {
     v.name.toLowerCase().includes(voiceSearch.toLowerCase())
   );
 
-  if (loading) return <div style={{padding:'48px',color:'var(--text-muted)'}}>Loadingâ¦</div>;
+  if (loading) return <div style={{padding:'48px',color:'var(--text-muted)'}}>Loading…</div>;
 
   return (
     <div>
@@ -1164,21 +1164,21 @@ function SettingsPage() {
         <div style={{display:'flex',flexDirection:'column',gap:'10px'}}>
           <div style={{display:'flex',alignItems:'center',gap:'10px',fontSize:'13px'}}>
             <span style={{color: config?.has_anthropic ? 'var(--impact)' : 'var(--red)'}}>
-              {config?.has_anthropic ? 'â' : 'â'}
+              {config?.has_anthropic ? '●' : '○'}
             </span>
             Anthropic API {config?.has_anthropic ? 'connected' : 'not configured'}
           </div>
           <div style={{display:'flex',alignItems:'center',gap:'10px',fontSize:'13px'}}>
             <span style={{color: config?.has_elevenlabs ? 'var(--impact)' : 'var(--red)'}}>
-              {config?.has_elevenlabs ? 'â' : 'â'}
+              {config?.has_elevenlabs ? '●' : '○'}
             </span>
             ElevenLabs API {config?.has_elevenlabs ? 'connected' : 'not configured'}
           </div>
           <div style={{display:'flex',alignItems:'center',gap:'10px',fontSize:'13px'}}>
             <span style={{color: config?.voice_id ? 'var(--impact)' : 'var(--red)'}}>
-              {config?.voice_id ? 'â' : 'â'}
+              {config?.voice_id ? '●' : '○'}
             </span>
-            Voice ID: {config?.voice_id || 'not set â see below'}
+            Voice ID: {config?.voice_id || 'not set — see below'}
           </div>
         </div>
       </div>
@@ -1194,7 +1194,7 @@ function SettingsPage() {
               type="text"
               value={voiceSearch}
               onChange={e => setVoiceSearch(e.target.value)}
-              placeholder="Search voicesâ¦"
+              placeholder="Search voices…"
             />
           </div>
           <div style={{maxHeight:'280px',overflowY:'auto',display:'flex',flexDirection:'column',gap:'6px'}}>
@@ -1241,7 +1241,7 @@ PORT=3000`}</pre>
     </div>
   );
 }
-// ââ QUEUE PAGE âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── QUEUE PAGE ───────────────────────────────────────────────────────────────
 
 function QueuePage() {
   const [episodes, setEpisodes] = useState([]);
@@ -1313,18 +1313,18 @@ function QueuePage() {
     return <span style={{ ...styles[s], padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{s}</span>;
   };
 
-  if (loading) return <div style={{padding:'48px',color:'var(--text-muted)'}}>Loadingâ¦</div>;
+  if (loading) return <div style={{padding:'48px',color:'var(--text-muted)'}}>Loading…</div>;
 
   return (
     <div>
       <h1 className="page-title">Queue</h1>
       <p className="page-subtitle">Draft and scheduled episodes. Nothing here appears in the RSS feed until published.</p>
 
-      {error && <div className="error-msg" style={{marginBottom:'24px'}}>{error}<button onClick={()=>setError('')} style={{marginLeft:'12px',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer'}}>â</button></div>}
+      {error && <div className="error-msg" style={{marginBottom:'24px'}}>{error}<button onClick={()=>setError('')} style={{marginLeft:'12px',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer'}}>✕</button></div>}
 
       {episodes.length === 0 && (
         <div style={{color:'var(--text-muted)',marginTop:'48px',textAlign:'center'}}>
-          <div style={{fontSize:'28px',marginBottom:'12px'}}>â</div>
+          <div style={{fontSize:'28px',marginBottom:'12px'}}>◎</div>
           <div>No episodes in the queue.</div>
           <div style={{fontSize:'13px',marginTop:'6px'}}>Import a script via the API or Cowork interview workflow.</div>
         </div>
@@ -1341,8 +1341,8 @@ function QueuePage() {
                 {ep.title || `Episode ${ep.number}`}
               </div>
               <div style={{fontSize:'12px',color:'var(--text-muted)',marginTop:'4px'}}>
-                #{ep.number} Â· {ep.date} Â· {ep.episode_type} Â· ~{ep.duration_estimate || '?'} min
-                {ep.audio_filename && <span style={{color:'var(--impact)',marginLeft:'8px'}}>â audio ready</span>}
+                #{ep.number} · {ep.date} · {ep.episode_type} · ~{ep.duration_estimate || '?'} min
+                {ep.audio_filename && <span style={{color:'var(--impact)',marginLeft:'8px'}}>● audio ready</span>}
               </div>
             </div>
           </div>
@@ -1364,14 +1364,14 @@ function QueuePage() {
               />
               <div style={{display:'flex',gap:'8px',marginTop:'8px'}}>
                 <button className="btn btn-primary" onClick={() => saveScript(ep)} disabled={saving[ep.id]}>
-                  {saving[ep.id] ? 'Savingâ¦' : 'Save'}
+                  {saving[ep.id] ? 'Saving…' : 'Save'}
                 </button>
                 <button className="btn" onClick={() => setEditingId(null)}>Cancel</button>
               </div>
             </div>
           ) : (
             <div style={{background:'var(--surface2)',borderRadius:'4px',padding:'12px',marginBottom:'16px',fontSize:'12px',color:'var(--text-muted)',fontFamily:'monospace',lineHeight:'1.7',maxHeight:'120px',overflow:'hidden',position:'relative'}}>
-              {(ep.script || '').substring(0, 400)}â¦
+              {(ep.script || '').substring(0, 400)}…
               <div style={{position:'absolute',bottom:0,left:0,right:0,height:'32px',background:'linear-gradient(transparent, var(--surface2))'}} />
             </div>
           )}
@@ -1380,15 +1380,15 @@ function QueuePage() {
           <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
             {editingId !== ep.id && (
               <button className="btn" onClick={() => { setEditingId(ep.id); setEditScript(ep.script||''); setEditTitle(ep.title||''); }}>
-                â Edit script
+                ✎ Edit script
               </button>
             )}
 
             {!ep.audio_filename && editingId !== ep.id && (
               <button className="btn" onClick={() => generateAudio(ep)} disabled={!!audioStatus[ep.id] && audioStatus[ep.id] !== 'done' && audioStatus[ep.id] !== 'error'}>
                 {audioStatus[ep.id] && audioStatus[ep.id] !== 'done' && audioStatus[ep.id] !== 'error'
-                  ? `â³ ${audioStatus[ep.id]}`
-                  : 'â¶ Generate audio'}
+                  ? `⟳ ${audioStatus[ep.id]}`
+                  : '▶ Generate audio'}
               </button>
             )}
 
@@ -1413,7 +1413,7 @@ function QueuePage() {
                     Schedule
                   </button>
                   <button className="btn btn-primary" onClick={() => setStatus(ep, 'published')} disabled={saving[ep.id]}>
-                    {saving[ep.id] ? 'Publishingâ¦' : 'Publish now'}
+                    {saving[ep.id] ? 'Publishing…' : 'Publish now'}
                   </button>
                 </>
               )}
@@ -1432,16 +1432,16 @@ function QueuePage() {
   );
 }
 
-// ââ APP SHELL ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ── APP SHELL ────────────────────────────────────────────────────────────────
 
 const PAGES = {
-  today: { label: 'Today', icon: 'â', component: TodayPage },
-  queue: { label: 'Queue', icon: 'â¡', component: QueuePage },
-  archive: { label: 'Archive', icon: 'â', component: ArchivePage },
-  sources: { label: 'Sources', icon: 'â', component: SourcesPage },
+  today: { label: 'Today', icon: '◉', component: TodayPage },
+  queue: { label: 'Queue', icon: '⊡', component: QueuePage },
+  archive: { label: 'Archive', icon: '◎', component: ArchivePage },
+  sources: { label: 'Sources', icon: '⊞', component: SourcesPage },
   contribute: { label: 'Contribute', icon: '+', component: ContributePage },
-  themes: { label: 'Themes', icon: 'â', component: ThemesPage },
-  settings: { label: 'Settings', icon: 'â', component: SettingsPage },
+  themes: { label: 'Themes', icon: '◈', component: ThemesPage },
+  settings: { label: 'Settings', icon: '⊙', component: SettingsPage },
 };
 
 function App() {
@@ -1449,12 +1449,12 @@ function App() {
   const Page = PAGES[page].component;
 
   const MOBILE_PAGES = [
-    ['today',      'Today',   'â'],
-    ['archive',    'Archive', 'â'],
-    ['sources',    'Sources', 'â'],
+    ['today',      'Today',   '◉'],
+    ['archive',    'Archive', '◎'],
+    ['sources',    'Sources', '⊞'],
     ['contribute', 'Add',     '+'],
-    ['themes',     'Themes',  'â'],
-    ['settings',   'More',    'â'],
+    ['themes',     'Themes',  '◈'],
+    ['settings',   'More',    '⊙'],
   ];
 
   return (
