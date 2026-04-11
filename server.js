@@ -5,10 +5,6 @@ const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
 const Anthropic = require('@anthropic-ai/sdk');
-const session = require('express-session');
-const { authenticator } = require('otplib');
-const QRCode = require('qrcode');
-const rateLimit = require('express-rate-limit');
 const db = require('./database');
 const cron = require('node-cron');
 
@@ -17,7 +13,8 @@ const PORT = process.env.PORT || 3000;
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '';
+const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || '';       // Megan
+const ELEVENLABS_ADAM_VOICE_ID = process.env.ELEVENLABS_ADAM_VOICE_ID || ''; // Adam (cloned)
 
 const AUDIO_DIR = process.env.AUDIO_DIR || path.join(__dirname, 'audio');
 if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
@@ -29,157 +26,59 @@ MEGAN: "And I'm Megan — Adam's AI co-host. My voice is synthetic, courtesy of 
 
 const INTRO_MEGAN_ONLY = `"I'm Megan — Adam's AI co-host. My voice is synthetic, courtesy of ElevenLabs. The scripts are written by Adam and Claude, grounded in Adam's research, his courses at UC Berkeley Haas, and his own opinions. Adam's out today, so I'm flying solo — but the content, as always, reflects his thinking. We verify every source we cite, but we're not infallible — if something sounds off, it's worth checking. Now, here's what's on our radar."`;
 
+// ─── DIALOGUE PARSER ─────────────────────────────────────────────────────────
+// Splits a dialogue script into { speaker, text } turns for text-to-dialogue API.
+// Handles both tagged lines (ADAM: / MEGAN:) and untagged lines (treated as MEGAN).
+
+function parseDialogue(script) {
+  const turns = [];
+  for (const line of script.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const match = trimmed.match(/^(ADAM|MEGAN):\s*"?(.+?)"?$/);
+    if (match) {
+      turns.push({ speaker: match[1], text: match[2].trim() });
+    } else if (turns.length > 0) {
+      // continuation line — append to last turn
+      turns[turns.length - 1].text += ' ' + trimmed.replace(/^"|"$/g, '');
+    } else {
+      turns.push({ speaker: 'MEGAN', text: trimmed.replace(/^"|"$/g, '') });
+    }
+  }
+  return turns.filter(t => t.text.length > 0);
+}
+
+// ─── JEWISH CALENDAR: SHABBAT + HOLIDAY GUARD ────────────────────────────────
+// Returns { skip: true, reason: string } on Shabbat or major Jewish holidays
+// (Yom Tov and major fasts — Yom Kippur, Tisha B'Av).
+// Uses @hebcal/core (ESM) via dynamic import. Diaspora rules apply.
+
+async function isJewishRestDay(date = new Date()) {
+  if (date.getDay() === 6) return { skip: true, reason: 'Shabbat' };
+  try {
+    const { HDate, HebrewCalendar, flags } = await import('@hebcal/core');
+    const hdate = new HDate(date);
+    const holidays = HebrewCalendar.getHolidaysOnDate(hdate, false); // false = diaspora
+    if (holidays) {
+      for (const h of holidays) {
+        const f = h.getFlags();
+        if (f & flags.CHAG || f & flags.MAJOR_FAST) {
+          return { skip: true, reason: h.getDesc() };
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[jewish-calendar] Error checking holidays:', err.message);
+  }
+  return { skip: false };
+}
+
 // ─── KILL SWITCH ─────────────────────────────────────────────────────────────
 
 function isShowActive() {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'show_active'").get();
   return !row || row.value === '1';
 }
-
-// ─── APP SETUP ───────────────────────────────────────────────────────────────
-
-app.use(cors({
-  origin: process.env.BASE_URL || 'http://localhost:3000',
-  credentials: true
-}));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: false }));
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'change-me-in-production',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { httpOnly: true }
-}));
-
-// ─── AUTH ROUTES (always public) ─────────────────────────────────────────────
-
-const LOGIN_PAGE = (error = '') => `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Login — The Overhang Admin</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, sans-serif; max-width: 380px; margin: 100px auto; padding: 0 24px; color: #111; }
-    h1 { font-size: 1.1rem; font-weight: 600; margin-bottom: 1.75rem; }
-    label { display: block; font-size: 0.8rem; font-weight: 500; margin-bottom: 4px; color: #555; }
-    input { display: block; width: 100%; padding: 8px 10px; margin-bottom: 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; }
-    input:focus { outline: none; border-color: #888; }
-    button { width: 100%; padding: 9px; background: #111; color: #fff; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; margin-top: 4px; }
-    button:hover { background: #333; }
-    .error { background: #fff0f0; border: 1px solid #f99; color: #c00; border-radius: 6px; padding: 8px 12px; font-size: 0.85rem; margin-bottom: 14px; }
-  </style>
-</head>
-<body>
-  <h1>The Overhang Admin</h1>
-  ${error ? `<div class="error">${error}</div>` : ''}
-  <form method="post" action="/login">
-    <label for="password">Password</label>
-    <input type="password" id="password" name="password" required autofocus>
-    <label for="totp">Authenticator code</label>
-    <input type="text" id="totp" name="totp" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="6-digit code" required autocomplete="one-time-code">
-    <button type="submit">Log in</button>
-  </form>
-</body>
-</html>`;
-
-app.get('/login', (req, res) => {
-  if (req.session?.authenticated) return res.redirect('/');
-  res.send(LOGIN_PAGE());
-});
-
-app.post('/login', (req, res) => {
-  const { password, totp } = req.body;
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminPassword) {
-    return res.send(LOGIN_PAGE('ADMIN_PASSWORD env var is not set.'));
-  }
-
-  const totpRow = db.prepare("SELECT value FROM settings WHERE key = 'totp_secret'").get();
-  if (!totpRow) {
-    return res.send(LOGIN_PAGE('TOTP not configured. Visit <a href="/setup">/setup</a> first.'));
-  }
-
-  const passwordOk = password === adminPassword;
-  const totpOk = authenticator.verify({ token: totp, secret: totpRow.value });
-
-  if (!passwordOk || !totpOk) {
-    return res.send(LOGIN_PAGE('Invalid password or authenticator code.'));
-  }
-
-  req.session.authenticated = true;
-  res.redirect('/');
-});
-
-app.get('/setup', async (req, res) => {
-  const existing = db.prepare("SELECT value FROM settings WHERE key = 'totp_secret'").get();
-  if (existing) {
-    return res.redirect('/login');
-  }
-
-  const secret = authenticator.generateSecret();
-  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('totp_secret', ?)").run(secret);
-
-  const otpauthUrl = authenticator.keyuri('admin', 'The Overhang', secret);
-  const qrDataUrl = await QRCode.toDataURL(otpauthUrl);
-
-  res.send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TOTP Setup — The Overhang Admin</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, sans-serif; max-width: 420px; margin: 80px auto; padding: 0 24px; color: #111; }
-    h1 { font-size: 1.1rem; font-weight: 600; }
-    p { font-size: 0.9rem; color: #444; line-height: 1.5; }
-    img { display: block; margin: 20px 0; border: 1px solid #eee; border-radius: 8px; }
-    code { font-family: monospace; background: #f5f5f5; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; word-break: break-all; }
-    a { color: #111; }
-  </style>
-</head>
-<body>
-  <h1>Set up authenticator</h1>
-  <p>Scan this QR code with Authy or another TOTP app. This page is shown only once — once you scan it, the secret is saved.</p>
-  <img src="${qrDataUrl}" alt="TOTP QR Code" width="200" height="200">
-  <p>Manual key: <code>${secret}</code></p>
-  <p><a href="/login">Go to login &rarr;</a></p>
-</body>
-</html>`);
-});
-
-app.get('/logout', (req, res) => {
-  req.session.destroy(() => res.redirect('/login'));
-});
-
-// ─── AUTH MIDDLEWARE ──────────────────────────────────────────────────────────
-
-app.use((req, res, next) => {
-  if (req.session?.authenticated) return next();
-  const p = req.path;
-  if (p === '/feed.xml') return next();
-  if (p.startsWith('/audio/')) return next();
-  if (p === '/login' || p === '/setup' || p === '/logout') return next();
-  // Allow static image assets referenced by RSS readers (cover art, favicon)
-  if (/\.(png|jpg|jpeg|ico|svg|webp)$/i.test(p)) return next();
-  if (req.accepts('html')) return res.redirect('/login');
-  res.status(401).json({ error: 'Unauthorized' });
-});
-
-// ─── STATIC FILES ────────────────────────────────────────────────────────────
-
-app.use(express.static(path.join(__dirname, 'public'), {
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html')) {
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    }
-  }
-}));
-app.use('/audio', express.static(AUDIO_DIR));
-
-// ─── KILL SWITCH ─────────────────────────────────────────────────────────────
 
 app.get('/api/settings', (req, res) => {
   res.json({ show_active: isShowActive() });
@@ -191,6 +90,17 @@ app.post('/api/settings/active', (req, res) => {
   console.log(`[settings] show_active set to ${active ? 'true' : 'false'}`);
   res.json({ ok: true, show_active: !!active });
 });
+
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    }
+  }
+}));
+app.use('/audio', express.static(AUDIO_DIR));
 
 // ─── THEMES ──────────────────────────────────────────────────────────────────
 
@@ -232,14 +142,6 @@ app.get('/api/contributed', (req, res) => {
 app.post('/api/contributed', (req, res) => {
   const { url, note } = req.body;
   if (!url) return res.status(400).json({ error: 'url required' });
-  try {
-    const parsed = new URL(url);
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
-      return res.status(400).json({ error: 'URL must start with http:// or https://' });
-    }
-  } catch {
-    return res.status(400).json({ error: 'Invalid URL — must be a valid http:// or https:// address' });
-  }
   const result = db.prepare('INSERT INTO contributed_urls (url, note) VALUES (?, ?)').run(url, note || null);
   res.json(db.prepare('SELECT * FROM contributed_urls WHERE id = ?').get(result.lastInsertRowid));
 });
@@ -290,14 +192,6 @@ app.post('/api/episodes/import', (req, res) => {
 
 // ─── EPISODE GENERATION ──────────────────────────────────────────────────────
 
-const generationLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many generation requests from this IP — try again in an hour.' }
-});
-
 // In-memory job store for async generation
 const generationJobs = {};
 
@@ -308,9 +202,12 @@ app.get('/api/episodes/generate/status', (req, res) => {
   res.json(latest);
 });
 
-app.post('/api/episodes/generate', generationLimiter, async (req, res) => {
+app.post('/api/episodes/generate', async (req, res) => {
   if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
   if (!isShowActive()) return res.status(403).json({ error: 'Show is currently inactive.' });
+
+  const restDay = await isJewishRestDay();
+  if (restDay.skip) return res.status(403).json({ error: `No episodes on ${restDay.reason}.` });
 
   // Check if generation already running
   const running = Object.values(generationJobs).find(j => j.status === 'running');
@@ -444,12 +341,10 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 - Have a clear narrative thread that weaves stories together, especially where they span both courses
 - Explicitly name the conceptual connections between stories when relevant
 - Open with a brief orienting sentence about today's themes, not a generic intro
-- Close with a brief forward-looking thought or question to sit with, before the sign-off
+- Close with a brief forward-looking thought or question to sit with
 - Reference sources naturally by name/outlet, not by number
-- Whenever you mention a specific statistic, finding, or direct quote, cite the outlet name and author (if known) inline in natural spoken language — for example, "according to Sarah Zhang writing in The Atlantic" or "a 2024 study in Nature found"
 - Do NOT include any host introduction or show intro — that is handled separately and will be prepended. Begin immediately with the episode content.
 - Do NOT start with "Welcome" or "Hello" — open in medias res with a brief orienting sentence about today's themes
-- End the script with a brief sign-off paragraph (2–4 sentences). It should: thank the listener for tuning in; transparently credit the tech stack — this script was written with Claude by Anthropic, the voice is Megan via ElevenLabs, and the show is hosted on Railway; remind listeners to verify sources independently since the show isn't infallible; and invite them to follow the podcast and leave a comment if today's episode sparked something. The sign-off should feel like a warm, natural Megan outro — brief, genuine, and varied slightly each episode rather than identical every time.
 
 **Tone and intellectual stance — this is critical:**
 - Be neither techno-optimist nor techno-pessimist. Do not editorialize in either direction.
@@ -463,11 +358,11 @@ Sources for today:
 ${sourcesForScript}
 
 Return a JSON object with exactly two fields:
-- "title": format exactly as: "#{episodeNumber} - {4-6 word punchy title} - {Month D, YYYY}" (e.g. "#5 - When Algorithms Shape Desire - April 11, 2026"). The middle portion must be distinct from recent titles — avoid reusing the same nouns, framings, or conceptual hooks.${recentTitlesBlock}
+- "title": a short, punchy 4–7 word title capturing today's central theme. Must be distinct from any recent episode titles — avoid reusing the same nouns, framings, or conceptual hooks.${recentTitlesBlock}
 - "script": the full podcast script text
 
 Example format:
-{"title": "#5 - When Convenience Becomes Surveillance - April 10, 2026", "script": "Adam, a quick one today..."}`;
+{"title": "When Convenience Becomes Surveillance", "script": "Adam, a quick one today..."}`;
 
       const scriptResponse = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
@@ -554,7 +449,7 @@ app.get('/api/episodes/:id/audio/status', (req, res) => {
   res.json(job);
 });
 
-app.post('/api/episodes/:id/audio', generationLimiter, async (req, res) => {
+app.post('/api/episodes/:id/audio', async (req, res) => {
   if (!ELEVENLABS_API_KEY) return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
   if (!ELEVENLABS_VOICE_ID) return res.status(500).json({ error: 'ELEVENLABS_VOICE_ID not configured' });
   if (!isShowActive()) return res.status(403).json({ error: 'Show is currently inactive.' });
@@ -580,22 +475,51 @@ app.post('/api/episodes/:id/audio', generationLimiter, async (req, res) => {
       const audioPath = path.join(AUDIO_DIR, audioFilename);
 
       job.step = 'Generating audio with ElevenLabs...';
-      const response = await axios.post(
-        `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
-        {
-          text: episode.script,
-          model_id: 'eleven_turbo_v2_5',
-          voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true }
-        },
-        {
-          headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
-          responseType: 'arraybuffer',
-          timeout: 300000  // 5 min
-        }
-      );
+
+      let audioData;
+
+      if (episode.episode_type === 'dialogue' && ELEVENLABS_ADAM_VOICE_ID) {
+        // ── Two-speaker dialogue: use text-to-dialogue endpoint ──────────────
+        const turns = parseDialogue(episode.script);
+        if (turns.length === 0) throw new Error('No dialogue turns found in script');
+
+        const response = await axios.post(
+          'https://api.elevenlabs.io/v1/text-to-dialogue',
+          {
+            inputs: turns.map(t => ({
+              text: t.text,
+              voice_id: t.speaker === 'ADAM' ? ELEVENLABS_ADAM_VOICE_ID : ELEVENLABS_VOICE_ID
+            })),
+            model_id: 'eleven_v3',
+            output_format: 'mp3_44100_128'
+          },
+          {
+            headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+            responseType: 'arraybuffer',
+            timeout: 300000
+          }
+        );
+        audioData = response.data;
+      } else {
+        // ── Single-voice monologue: use text-to-speech endpoint ──────────────
+        const response = await axios.post(
+          `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+          {
+            text: episode.script,
+            model_id: 'eleven_turbo_v2_5',
+            voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true }
+          },
+          {
+            headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
+            responseType: 'arraybuffer',
+            timeout: 300000
+          }
+        );
+        audioData = response.data;
+      }
 
       job.step = 'Saving audio file...';
-      fs.writeFileSync(audioPath, response.data);
+      fs.writeFileSync(audioPath, Buffer.from(audioData));
       db.prepare('UPDATE episodes SET audio_filename = ? WHERE id = ?').run(audioFilename, episode.id);
 
       job.status = 'complete';
@@ -681,6 +605,13 @@ app.get('/api/voices', async (req, res) => {
   }
 });
 
+app.get('/api/config', (req, res) => {
+  res.json({
+    voice_id: ELEVENLABS_VOICE_ID,
+    has_anthropic: !!ANTHROPIC_API_KEY,
+    has_elevenlabs: !!ELEVENLABS_API_KEY
+  });
+});
 
 // ─── RSS FEED (Apple Podcasts compatible) ────────────────────────────────────
 
@@ -730,8 +661,9 @@ app.get('/feed.xml', (req, res) => {
   xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
   xmlns:content="http://purl.org/rss/modules/content/">
   <channel>
-    <title>The Overhang</title>
-<description>The overhang is the space between what technology can do and what society can handle. Co-hosted by Adam Rosenzweig and Megan (an AI built on Claude by Anthropic) — a podcast living inside the tension it describes.</description>    <link>${BASE_URL}</link>
+    <title>Course Briefing &#x2013; Adam Rosenzweig</title>
+    <description>Daily AI-generated briefings for Intimate Technology and Social Impact Strategy in Commercial Tech at UC Berkeley Haas.</description>
+    <link>${BASE_URL}</link>
     <language>en-us</language>
     <itunes:author>Adam Rosenzweig</itunes:author>
     <itunes:email>adam.lev.rosenzweig@gmail.com</itunes:email>
@@ -759,11 +691,17 @@ app.get('*', (req, res) => {
 // no episode of any kind has been published for >3 days.
 // This keeps the show alive during gaps without requiring Adam's involvement.
 
-cron.schedule('0 9 * * *', async () => {
-  console.log('[fallback-cron] Running fallback check at', new Date().toISOString());
+cron.schedule('0 9 * * 0-5', async () => {
+  console.log('[cron] Running fallback check at', new Date().toISOString());
 
   if (!isShowActive()) {
-    console.log('[fallback-cron] Show inactive, skipping.');
+    console.log('[cron] Show inactive, skipping.');
+    return;
+  }
+
+  const restDay = await isJewishRestDay();
+  if (restDay.skip) {
+    console.log(`[cron] Skipping — ${restDay.reason}.`);
     return;
   }
 
@@ -781,32 +719,32 @@ cron.schedule('0 9 * * *', async () => {
     ? (now - new Date(lastAny.d)) / (1000 * 60 * 60 * 24)
     : 999;
 
-  console.log(`[fallback-cron] Days since dialogue: ${daysSinceDialogue.toFixed(1)}, days since any episode: ${daysSinceAny.toFixed(1)}`);
+  console.log(`[cron] Days since dialogue: ${daysSinceDialogue.toFixed(1)}, days since any episode: ${daysSinceAny.toFixed(1)}`);
 
   if (daysSinceDialogue <= 7 || daysSinceAny <= 3) {
-    console.log('[fallback-cron] Fallback not needed, skipping.');
+    console.log('[cron] Fallback not needed, skipping.');
     return;
   }
 
-  console.log('[fallback-cron] Fallback triggered — generating Megan-only episode.');
+  console.log('[cron] Fallback triggered — generating Megan-only episode.');
 
   const port = process.env.PORT || 3000;
   const base = `http://localhost:${port}`;
 
   try {
     await axios.post(`${base}/api/episodes/generate`, { episode_type: 'megan_only' });
-    console.log('[fallback-cron] Fallback generation started, polling...');
+    console.log('[cron] Fallback generation started, polling...');
 
     let episodeId = null;
     const genDeadline = Date.now() + 10 * 60 * 1000;
     while (Date.now() < genDeadline) {
       await new Promise(r => setTimeout(r, 15000));
       const { data } = await axios.get(`${base}/api/episodes/generate/status`);
-      console.log('[fallback-cron] Generation status:', data.status, data.step || '');
-      if (data.status === 'error') { console.error('[fallback-cron] Generation failed:', data.error); return; }
+      console.log('[cron] Generation status:', data.status, data.step || '');
+      if (data.status === 'error') { console.error('[cron] Generation failed:', data.error); return; }
       if (data.status === 'complete') { episodeId = data.episodeId; break; }
     }
-    if (!episodeId) { console.error('[fallback-cron] Generation timed out.'); return; }
+    if (!episodeId) { console.error('[cron] Generation timed out.'); return; }
 
     await axios.post(`${base}/api/episodes/${episodeId}/audio`, {});
 
@@ -814,77 +752,17 @@ cron.schedule('0 9 * * *', async () => {
     while (Date.now() < audioDeadline) {
       await new Promise(r => setTimeout(r, 20000));
       const { data } = await axios.get(`${base}/api/episodes/${episodeId}`);
-      if (data.audio_filename) { console.log('[fallback-cron] Fallback audio ready:', data.audio_filename); return; }
+      if (data.audio_filename) { console.log('[cron] Fallback audio ready:', data.audio_filename); return; }
     }
-    console.error('[fallback-cron] Audio generation timed out.');
+    console.error('[cron] Audio generation timed out.');
   } catch (err) {
-    console.error('[fallback-cron] Fallback cron failed:', err.message);
+    console.error('[cron] Fallback cron failed:', err.message);
   }
 }, {
   timezone: 'America/Los_Angeles'
 });
 
-console.log('[cron] Megan-only fallback cron scheduled: 9:00 AM Pacific daily');
-
-// ─── DAILY EPISODE CRON ───────────────────────────────────────────────────────
-// Runs every morning at 7:00 AM Pacific. Generates a fresh Megan-only episode
-// unless one already exists for today.
-
-cron.schedule('0 7 * * *', async () => {
-  console.log('[daily-cron] Running daily episode generation at', new Date().toISOString());
-
-  if (!isShowActive()) {
-    console.log('[daily-cron] Show inactive, skipping.');
-    return;
-  }
-
-  const today = new Date().toISOString().split('T')[0];
-  const existing = db.prepare('SELECT id FROM episodes WHERE date = ?').get(today);
-  if (existing) {
-    console.log(`[daily-cron] Episode already exists for ${today} (id=${existing.id}), skipping.`);
-    return;
-  }
-
-  const port = process.env.PORT || 3000;
-  const base = `http://localhost:${port}`;
-
-  try {
-    console.log('[daily-cron] No episode for today — starting generation...');
-    await axios.post(`${base}/api/episodes/generate`, { episode_type: 'megan_only' });
-
-    let episodeId = null;
-    const genDeadline = Date.now() + 10 * 60 * 1000;
-    while (Date.now() < genDeadline) {
-      await new Promise(r => setTimeout(r, 15000));
-      const { data } = await axios.get(`${base}/api/episodes/generate/status`);
-      console.log('[daily-cron] Generation status:', data.status, data.step || '');
-      if (data.status === 'error') { console.error('[daily-cron] Generation failed:', data.error); return; }
-      if (data.status === 'complete') { episodeId = data.episodeId; break; }
-    }
-    if (!episodeId) { console.error('[daily-cron] Generation timed out after 10 minutes.'); return; }
-
-    console.log(`[daily-cron] Episode ${episodeId} generated. Starting audio synthesis...`);
-    await axios.post(`${base}/api/episodes/${episodeId}/audio`, {});
-
-    const audioDeadline = Date.now() + 5 * 60 * 1000;
-    while (Date.now() < audioDeadline) {
-      await new Promise(r => setTimeout(r, 20000));
-      const { data } = await axios.get(`${base}/api/episodes/${episodeId}`);
-      if (data.audio_filename) {
-        console.log(`[daily-cron] Audio ready: ${data.audio_filename}`);
-        return;
-      }
-      console.log('[daily-cron] Waiting for audio...');
-    }
-    console.error('[daily-cron] Audio generation timed out after 5 minutes.');
-  } catch (err) {
-    console.error('[daily-cron] Daily cron failed:', err.message);
-  }
-}, {
-  timezone: 'America/Los_Angeles'
-});
-
-console.log('[cron] Daily episode cron scheduled: 7:00 AM Pacific daily');
+console.log('[cron] Megan-only fallback cron scheduled: 9:00 AM Pacific, Sun–Fri, skipping Jewish holidays');
 
 app.listen(PORT, () => {
   console.log(`Podcast Briefing server running on port ${PORT}`);
