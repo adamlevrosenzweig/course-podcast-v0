@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
+const crypto = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
 const db = require('./database');
 const cron = require('node-cron');
@@ -18,6 +19,104 @@ const ELEVENLABS_ADAM_VOICE_ID = process.env.ELEVENLABS_ADAM_VOICE_ID || ''; // 
 
 const AUDIO_DIR = process.env.AUDIO_DIR || path.join(__dirname, 'audio');
 if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+function signToken(ts) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(ts).digest('hex');
+}
+function makeSession() {
+  const ts = Date.now().toString();
+  return `${ts}.${signToken(ts)}`;
+}
+function isValidSession(raw) {
+  if (!raw) return false;
+  const dot = raw.lastIndexOf('.');
+  if (dot === -1) return false;
+  const ts = raw.slice(0, dot);
+  const sig = raw.slice(dot + 1);
+  if (Date.now() - parseInt(ts, 10) > SESSION_MAX_AGE_MS) return false;
+  const expected = signToken(ts);
+  try {
+    return sig.length === expected.length &&
+      crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'));
+  } catch { return false; }
+}
+function parseCookie(req, name) {
+  const header = req.headers.cookie || '';
+  const pair = header.split(';').map(c => c.trim()).find(c => c.startsWith(`${name}=`));
+  return pair ? decodeURIComponent(pair.slice(name.length + 1)) : null;
+}
+function requireAuth(req, res, next) {
+  if (!ADMIN_PASSWORD) return next(); // no password configured → open access
+  if (isValidSession(parseCookie(req, 'session'))) return next();
+  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' });
+  res.redirect('/login');
+}
+
+// ── Login page ────────────────────────────────────────────────────────────────
+const LOGIN_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Overhang — Sign In</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f0f0d; color: #e8e6df; font-family: 'Inter', sans-serif;
+      display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { width: 100%; max-width: 360px; padding: 48px 40px; background: #1a1a17;
+      border: 1px solid #2e2e2a; border-radius: 12px; }
+    .logo { font-family: 'Playfair Display', serif; font-size: 22px; color: #c8a96e;
+      margin-bottom: 6px; }
+    .sub { font-size: 12px; color: #7a7870; letter-spacing: 0.05em; margin-bottom: 36px; }
+    label { font-size: 12px; color: #7a7870; letter-spacing: 0.04em; display: block; margin-bottom: 6px; }
+    input { width: 100%; background: #0f0f0d; border: 1px solid #2e2e2a; border-radius: 6px;
+      padding: 10px 14px; color: #e8e6df; font-size: 15px; outline: none; margin-bottom: 16px; }
+    input:focus { border-color: #c8a96e; }
+    button { width: 100%; background: #c8a96e; color: #0f0f0d; border: none; border-radius: 6px;
+      padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer; letter-spacing: 0.02em; }
+    button:hover { background: #d4b87e; }
+    .error { color: #c06060; font-size: 13px; margin-bottom: 14px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">The Overhang</div>
+    <div class="sub">RESEARCH PODCAST</div>
+    {{ERROR}}
+    <form method="POST" action="/login">
+      <label>PASSWORD</label>
+      <input type="password" name="password" autofocus autocomplete="current-password" />
+      <button type="submit">Sign in</button>
+    </form>
+  </div>
+</body>
+</html>`;
+
+app.get('/login', (req, res) => {
+  if (ADMIN_PASSWORD && isValidSession(parseCookie(req, 'session'))) return res.redirect('/');
+  res.send(LOGIN_HTML.replace('{{ERROR}}', ''));
+});
+
+app.post('/login', express.urlencoded({ extended: false }), (req, res) => {
+  if (!ADMIN_PASSWORD || req.body.password === ADMIN_PASSWORD) {
+    res.setHeader('Set-Cookie',
+      `session=${encodeURIComponent(makeSession())}; HttpOnly; SameSite=Strict; Max-Age=${SESSION_MAX_AGE_MS / 1000}; Path=/`
+    );
+    return res.redirect('/');
+  }
+  res.status(401).send(LOGIN_HTML.replace('{{ERROR}}', '<div class="error">Incorrect password.</div>'));
+});
+
+app.post('/logout', (req, res) => {
+  res.setHeader('Set-Cookie', 'session=; HttpOnly; SameSite=Strict; Max-Age=0; Path=/');
+  res.redirect('/login');
+});
 
 // ─── EPISODE INTROS ──────────────────────────────────────────────────────────
 
@@ -46,6 +145,27 @@ function parseDialogue(script) {
     }
   }
   return turns.filter(t => t.text.length > 0);
+}
+
+// ─── CHUNK TURNS to stay under ElevenLabs 5000-char API limit ────────────────
+const DIALOGUE_CHAR_LIMIT = 4800;
+
+function chunkTurns(turns) {
+  const chunks = [];
+  let current = [];
+  let currentLen = 0;
+  for (const turn of turns) {
+    const len = turn.text.length + turn.speaker.length + 2;
+    if (current.length > 0 && currentLen + len > DIALOGUE_CHAR_LIMIT) {
+      chunks.push(current);
+      current = [];
+      currentLen = 0;
+    }
+    current.push(turn);
+    currentLen += len;
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
 }
 
 // ─── JEWISH CALENDAR: SHABBAT + HOLIDAY GUARD ────────────────────────────────
@@ -93,6 +213,13 @@ app.post('/api/settings/active', (req, res) => {
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// Auth guard — exempts RSS feed and audio (needed by podcast apps)
+app.use((req, res, next) => {
+  if (req.path === '/feed.xml' || req.path.startsWith('/audio/')) return next();
+  requireAuth(req, res, next);
+});
+
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html')) {
@@ -167,6 +294,44 @@ app.get('/api/episodes/:id', (req, res) => {
   res.json({ ...episode, sources, feedback });
 });
 
+// ─── EPISODE STATUS + SCHEDULING ─────────────────────────────────────────────
+
+// PATCH /api/episodes/:id/status
+// Body: { status: 'draft' | 'scheduled' | 'published', publish_at: 'YYYY-MM-DD' }
+app.patch('/api/episodes/:id/status', (req, res) => {
+  const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+  if (!episode) return res.status(404).json({ error: 'Not found' });
+
+  const { status, publish_at } = req.body;
+  const valid = ['draft', 'scheduled', 'published'];
+  if (status && !valid.includes(status)) return res.status(400).json({ error: `status must be one of: ${valid.join(', ')}` });
+
+  db.prepare('UPDATE episodes SET status = COALESCE(?, status), publish_at = ? WHERE id = ?')
+    .run(status || null, publish_at || null, req.params.id);
+
+  console.log(`[status] Episode ${episode.number} → ${status || episode.status}${publish_at ? ` (publish: ${publish_at})` : ''}`);
+  res.json(db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id));
+});
+
+// PATCH /api/episodes/:id/script
+// Body: { script: '...', title: '...' }
+app.patch('/api/episodes/:id/script', (req, res) => {
+  const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+  if (!episode) return res.status(404).json({ error: 'Not found' });
+
+  const { script, title } = req.body;
+  if (!script && !title) return res.status(400).json({ error: 'script or title required' });
+
+  const wordCount = script ? script.split(/\s+/).length : null;
+  const duration = wordCount ? Math.round(wordCount / 150) : null;
+
+  db.prepare('UPDATE episodes SET script = COALESCE(?, script), title = COALESCE(?, title), duration_estimate = COALESCE(?, duration_estimate) WHERE id = ?')
+    .run(script || null, title || null, duration, req.params.id);
+
+  console.log(`[script] Episode ${episode.number} script updated`);
+  res.json(db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id));
+});
+
 // ─── EPISODE IMPORT (pre-written script from Cowork interview workflow) ───────
 
 app.post('/api/episodes/import', (req, res) => {
@@ -182,11 +347,11 @@ app.post('/api/episodes/import', (req, res) => {
   const durationEstimate = Math.round(wordCount / 150);
 
   const result = db.prepare(
-    'INSERT INTO episodes (number, date, title, script, duration_estimate, episode_type) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(episodeNumber, today, title || '', script, durationEstimate, episode_type || 'dialogue');
+    'INSERT INTO episodes (number, date, title, script, duration_estimate, episode_type, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(episodeNumber, today, title || '', script, durationEstimate, episode_type || 'dialogue', 'draft');
 
   const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(result.lastInsertRowid);
-  console.log(`[import] Episode ${episodeNumber} imported (${episode_type || 'dialogue'})`);
+  console.log(`[import] Episode ${episodeNumber} imported as draft (${episode_type || 'dialogue'})`);
   res.json(episode);
 });
 
@@ -378,7 +543,6 @@ Example format:
         episodeTitle = parsed.title || '';
       } catch (_) {
         script = rawResponse;
-
         episodeTitle = '';
       }
 
@@ -479,27 +643,35 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
       let audioData;
 
       if (episode.episode_type === 'dialogue' && ELEVENLABS_ADAM_VOICE_ID) {
-        // ── Two-speaker dialogue: use text-to-dialogue endpoint ──────────────
+        // ── Two-speaker dialogue: chunked to stay under 5000-char API limit ──
         const turns = parseDialogue(episode.script);
         if (turns.length === 0) throw new Error('No dialogue turns found in script');
 
-        const response = await axios.post(
-          'https://api.elevenlabs.io/v1/text-to-dialogue',
-          {
-            inputs: turns.map(t => ({
-              text: t.text,
-              voice_id: t.speaker === 'ADAM' ? ELEVENLABS_ADAM_VOICE_ID : ELEVENLABS_VOICE_ID
-            })),
-            model_id: 'eleven_v3',
-            output_format: 'mp3_44100_128'
-          },
-          {
-            headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
-            responseType: 'arraybuffer',
-            timeout: 300000
-          }
-        );
-        audioData = response.data;
+        const chunks = chunkTurns(turns);
+        console.log(`[audio] ${chunks.length} chunk(s) for episode ${episode.number}`);
+
+        const buffers = [];
+        for (let i = 0; i < chunks.length; i++) {
+          job.step = `Generating audio chunk ${i + 1}/${chunks.length}...`;
+          const response = await axios.post(
+            'https://api.elevenlabs.io/v1/text-to-dialogue',
+            {
+              inputs: chunks[i].map(t => ({
+                text: t.text,
+                voice_id: t.speaker === 'ADAM' ? ELEVENLABS_ADAM_VOICE_ID : ELEVENLABS_VOICE_ID
+              })),
+              model_id: 'eleven_v3',
+              output_format: 'mp3_44100_128'
+            },
+            {
+              headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+              responseType: 'arraybuffer',
+              timeout: 300000
+            }
+          );
+          buffers.push(Buffer.from(response.data));
+        }
+        audioData = Buffer.concat(buffers);
       } else {
         // ── Single-voice monologue: use text-to-speech endpoint ──────────────
         const response = await axios.post(
@@ -618,7 +790,7 @@ app.get('/api/config', (req, res) => {
 app.get('/feed.xml', (req, res) => {
   const BASE_URL = process.env.BASE_URL || `https://${req.headers.host}`;
   const episodes = db.prepare(`
-    SELECT * FROM episodes WHERE audio_filename IS NOT NULL ORDER BY number DESC
+    SELECT * FROM episodes WHERE audio_filename IS NOT NULL AND status = 'published' ORDER BY number DESC
   `).all();
 
   // Fix double-encoded UTF-8 characters that can appear in stored strings
@@ -684,6 +856,29 @@ app.get('/feed.xml', (req, res) => {
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+// ─── AUTO-PUBLISH CRON ───────────────────────────────────────────────────────
+// Runs daily at midnight Pacific. Publishes any scheduled episode whose
+// publish_at date is today or earlier.
+
+cron.schedule('0 0 * * *', async () => {
+  const today = new Date().toISOString().split('T')[0];
+  const due = db.prepare(
+    "SELECT * FROM episodes WHERE status = 'scheduled' AND publish_at <= ?"
+  ).all(today);
+
+  if (due.length === 0) {
+    console.log('[auto-publish] No episodes due today.');
+    return;
+  }
+
+  for (const ep of due) {
+    db.prepare("UPDATE episodes SET status = 'published' WHERE id = ?").run(ep.id);
+    console.log(`[auto-publish] Episode ${ep.number} published (was scheduled for ${ep.publish_at})`);
+  }
+}, { timezone: 'America/Los_Angeles' });
+
+console.log('[auto-publish] Midnight publish cron scheduled (Pacific time)');
 
 // ─── MEGAN-ONLY FALLBACK CRON ────────────────────────────────────────────────
 // Runs daily at 9:00 AM Pacific. Does NOT generate on a fixed schedule.
