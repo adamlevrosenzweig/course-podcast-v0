@@ -337,10 +337,15 @@ app.patch('/api/episodes/:id/script', (req, res) => {
 app.post('/api/episodes/import', (req, res) => {
   if (!isShowActive()) return res.status(403).json({ error: 'Show is currently inactive.' });
 
-  const { script, title, episode_type } = req.body;
-  if (!script) return res.status(400).json({ error: 'script required' });
+const { script: rawScript, title, episode_type } = req.body;
+if (!rawScript) return res.status(400).json({ error: 'script required' });
 
-  const lastEp = db.prepare('SELECT MAX(number) as n FROM episodes').get();
+// Prepend fixed intro (same as generate flow).
+// .txt files pushed via push-to-railway should contain only the episode body — not the intro.
+const intro = episode_type === 'megan_only' ? INTRO_MEGAN_ONLY : INTRO_DIALOGUE;
+const script = `${intro}\n\n${rawScript}`;
+
+const lastEp = db.prepare('SELECT MAX(number) as n FROM episodes').get();
   const episodeNumber = (lastEp.n || 0) + 1;
   const today = new Date().toISOString().split('T')[0];
   const wordCount = script.split(/\s+/).length;
