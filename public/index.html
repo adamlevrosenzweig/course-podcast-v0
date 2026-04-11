@@ -1241,11 +1241,203 @@ PORT=3000`}</pre>
     </div>
   );
 }
+```javascript
+// ── QUEUE PAGE ───────────────────────────────────────────────────────────────
+
+function QueuePage() {
+  const [episodes, setEpisodes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [editScript, setEditScript] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [publishDate, setPublishDate] = useState({});
+  const [saving, setSaving] = useState({});
+  const [audioStatus, setAudioStatus] = useState({});
+
+  const load = async () => {
+    try {
+      const all = await apiFetch('/api/episodes');
+      setEpisodes(all.filter(e => e.status === 'draft' || e.status === 'scheduled'));
+    } catch(e) { setError(e.message); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  async function setStatus(ep, status) {
+    setSaving(s => ({ ...s, [ep.id]: true }));
+    try {
+      const pd = publishDate[ep.id] || ep.publish_at || null;
+      await apiFetch(`/api/episodes/${ep.id}/status`, {
+        method: 'PATCH',
+        body: { status, publish_at: status === 'scheduled' ? pd : null }
+      });
+      await load();
+    } catch(e) { setError(e.message); }
+    setSaving(s => ({ ...s, [ep.id]: false }));
+  }
+
+  async function saveScript(ep) {
+    setSaving(s => ({ ...s, [ep.id]: true }));
+    try {
+      await apiFetch(`/api/episodes/${ep.id}/script`, {
+        method: 'PATCH',
+        body: { script: editScript, title: editTitle }
+      });
+      setEditingId(null);
+      await load();
+    } catch(e) { setError(e.message); }
+    setSaving(s => ({ ...s, [ep.id]: false }));
+  }
+
+  async function generateAudio(ep) {
+    setAudioStatus(s => ({ ...s, [ep.id]: 'generating' }));
+    try {
+      await apiFetch(`/api/episodes/${ep.id}/audio`, { method: 'POST', body: {} });
+      let done = false;
+      while (!done) {
+        await new Promise(r => setTimeout(r, 4000));
+        const job = await apiFetch(`/api/episodes/${ep.id}/audio/status`);
+        if (job.status === 'complete') { done = true; setAudioStatus(s => ({ ...s, [ep.id]: 'done' })); await load(); }
+        else if (job.status === 'error') { done = true; setAudioStatus(s => ({ ...s, [ep.id]: 'error' })); setError(job.error); }
+        else setAudioStatus(s => ({ ...s, [ep.id]: job.step || 'generating' }));
+      }
+    } catch(e) { setError(e.message); setAudioStatus(s => ({ ...s, [ep.id]: 'error' })); }
+  }
+
+  const statusBadge = (s) => {
+    const styles = {
+      draft:     { background: 'rgba(122,120,112,0.2)', color: '#7a7870', border: '1px solid #3a3a36' },
+      scheduled: { background: 'rgba(159,187,138,0.15)', color: '#9fbb8a', border: '1px solid #4a6040' },
+      published: { background: 'rgba(200,169,110,0.15)', color: '#c8a96e', border: '1px solid #6a5030' },
+    };
+    return <span style={{ ...styles[s], padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{s}</span>;
+  };
+
+  if (loading) return <div style={{padding:'48px',color:'var(--text-muted)'}}>Loading…</div>;
+
+  return (
+    <div>
+      <h1 className="page-title">Queue</h1>
+      <p className="page-subtitle">Draft and scheduled episodes. Nothing here appears in the RSS feed until published.</p>
+
+      {error && <div className="error-msg" style={{marginBottom:'24px'}}>{error}<button onClick={()=>setError('')} style={{marginLeft:'12px',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer'}}>✕</button></div>}
+
+      {episodes.length === 0 && (
+        <div style={{color:'var(--text-muted)',marginTop:'48px',textAlign:'center'}}>
+          <div style={{fontSize:'28px',marginBottom:'12px'}}>◎</div>
+          <div>No episodes in the queue.</div>
+          <div style={{fontSize:'13px',marginTop:'6px'}}>Import a script via the API or Cowork interview workflow.</div>
+        </div>
+      )}
+
+      {episodes.map(ep => (
+        <div key={ep.id} style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'8px',padding:'24px',marginBottom:'16px'}}>
+
+          {/* Header */}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'16px'}}>
+            <div>
+              {statusBadge(ep.status)}
+              <div style={{marginTop:'8px',fontFamily:'Playfair Display, serif',fontSize:'16px',color:'var(--text)'}}>
+                {ep.title || `Episode ${ep.number}`}
+              </div>
+              <div style={{fontSize:'12px',color:'var(--text-muted)',marginTop:'4px'}}>
+                #{ep.number} · {ep.date} · {ep.episode_type} · ~{ep.duration_estimate || '?'} min
+                {ep.audio_filename && <span style={{color:'var(--impact)',marginLeft:'8px'}}>● audio ready</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* Script editor */}
+          {editingId === ep.id ? (
+            <div style={{marginBottom:'16px'}}>
+              <input
+                value={editTitle}
+                onChange={e => setEditTitle(e.target.value)}
+                placeholder="Episode title"
+                style={{width:'100%',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'4px',padding:'8px 12px',color:'var(--text)',fontSize:'13px',marginBottom:'8px'}}
+              />
+              <textarea
+                value={editScript}
+                onChange={e => setEditScript(e.target.value)}
+                rows={20}
+                style={{width:'100%',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'4px',padding:'12px',color:'var(--text)',fontSize:'13px',fontFamily:'monospace',lineHeight:'1.6',resize:'vertical'}}
+              />
+              <div style={{display:'flex',gap:'8px',marginTop:'8px'}}>
+                <button className="btn btn-primary" onClick={() => saveScript(ep)} disabled={saving[ep.id]}>
+                  {saving[ep.id] ? 'Saving…' : 'Save'}
+                </button>
+                <button className="btn" onClick={() => setEditingId(null)}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{background:'var(--surface2)',borderRadius:'4px',padding:'12px',marginBottom:'16px',fontSize:'12px',color:'var(--text-muted)',fontFamily:'monospace',lineHeight:'1.7',maxHeight:'120px',overflow:'hidden',position:'relative'}}>
+              {(ep.script || '').substring(0, 400)}…
+              <div style={{position:'absolute',bottom:0,left:0,right:0,height:'32px',background:'linear-gradient(transparent, var(--surface2))'}} />
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
+            {editingId !== ep.id && (
+              <button className="btn" onClick={() => { setEditingId(ep.id); setEditScript(ep.script||''); setEditTitle(ep.title||''); }}>
+                ✎ Edit script
+              </button>
+            )}
+
+            {!ep.audio_filename && editingId !== ep.id && (
+              <button className="btn" onClick={() => generateAudio(ep)} disabled={!!audioStatus[ep.id] && audioStatus[ep.id] !== 'done' && audioStatus[ep.id] !== 'error'}>
+                {audioStatus[ep.id] && audioStatus[ep.id] !== 'done' && audioStatus[ep.id] !== 'error'
+                  ? `⟳ ${audioStatus[ep.id]}`
+                  : '▶ Generate audio'}
+              </button>
+            )}
+
+            {ep.audio_filename && (
+              <audio controls src={`/audio/${ep.audio_filename}`} style={{height:'32px',flex:'1',minWidth:'200px'}} />
+            )}
+
+            <div style={{display:'flex',gap:'6px',alignItems:'center',marginLeft:'auto'}}>
+              {ep.status === 'draft' && (
+                <>
+                  <input
+                    type="date"
+                    value={publishDate[ep.id] || ep.publish_at || ''}
+                    onChange={e => setPublishDate(d => ({ ...d, [ep.id]: e.target.value }))}
+                    style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'4px',padding:'4px 8px',color:'var(--text)',fontSize:'12px'}}
+                  />
+                  <button className="btn"
+                    onClick={() => setStatus(ep, 'scheduled')}
+                    disabled={!publishDate[ep.id] || saving[ep.id]}
+                    title="Schedule for selected date"
+                  >
+                    Schedule
+                  </button>
+                  <button className="btn btn-primary" onClick={() => setStatus(ep, 'published')} disabled={saving[ep.id]}>
+                    {saving[ep.id] ? 'Publishing…' : 'Publish now'}
+                  </button>
+                </>
+              )}
+              {ep.status === 'scheduled' && (
+                <>
+                  <span style={{fontSize:'12px',color:'var(--text-muted)'}}>Publishes {ep.publish_at}</span>
+                  <button className="btn" onClick={() => setStatus(ep, 'draft')} disabled={saving[ep.id]}>Unschedule</button>
+                  <button className="btn btn-primary" onClick={() => setStatus(ep, 'published')} disabled={saving[ep.id]}>Publish now</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ── APP SHELL ────────────────────────────────────────────────────────────────
 
 const PAGES = {
   today: { label: 'Today', icon: '◉', component: TodayPage },
+  queue: { label: 'Queue', icon: '⊡', component: QueuePage },
   archive: { label: 'Archive', icon: '◎', component: ArchivePage },
   sources: { label: 'Sources', icon: '⊞', component: SourcesPage },
   contribute: { label: 'Contribute', icon: '+', component: ContributePage },
@@ -1289,6 +1481,11 @@ function App() {
           Intimate Technology<br />
           Social Impact Strategy
         </div>
+        <form method="POST" action="/logout" style={{padding:'12px 16px 20px'}}>
+    <button type="submit" style={{width:'100%',background:'none',border:'1px solid #2e2e2a',borderRadius:'6px',padding:'7px 12px',color:'#7a7870',fontSize:'12px',cursor:'pointer',letterSpacing:'0.04em'}}>
+      Sign out
+    </button>
+  </form>
       </div>
       <main className="main">
         <Page onNavigate={setPage} />
