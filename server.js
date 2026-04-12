@@ -123,10 +123,13 @@ app.post('/logout', (req, res) => {
 
 // ─── EPISODE INTROS ──────────────────────────────────────────────────────────
 
-const INTRO_DIALOGUE = `ADAM: "I'm Adam Rosenzweig — I teach courses at UC Berkeley Haas about the social impacts of technology and how we can build a more human-centered future. This show is where I think out loud about what's happening in that space."
-MEGAN: "And I'm Megan — Adam's AI co-host. My voice is synthetic, courtesy of ElevenLabs. The scripts are written by Adam and Claude, grounded in Adam's research, his courses at UC Berkeley Haas, and his own opinions. We verify every source we cite, but we're not infallible — if something sounds off, it's worth checking. Now, here's what's on our radar."`;
+const INTRO_DIALOGUE = `MEGAN: "Hey — I'm Megan, co-host of The Overhang. Quick housekeeping before we get into it: both voices on this show are AI. Mine is fully synthetic, built on ElevenLabs. Adam's is a clone of his real voice, also ElevenLabs. The scripts are written by Adam and Claude, grounded in Adam's research and his courses at UC Berkeley Haas. We fact-check our sources, but AI makes mistakes — if something sounds off, go verify it. Here's what's on our radar today."`;
 
-const INTRO_MEGAN_ONLY = `"I'm Megan — Adam's AI co-host. My voice is synthetic, courtesy of ElevenLabs. The scripts are written by Adam and Claude, grounded in Adam's research, his courses at UC Berkeley Haas, and his own opinions. Adam's out today, so I'm flying solo — but the content, as always, reflects his thinking. We verify every source we cite, but we're not infallible — if something sounds off, it's worth checking. Now, here's what's on our radar."`;
+const INTRO_MEGAN_ONLY = `"Hey — I'm Megan, host of The Overhang. Quick note: my voice is fully synthetic, built on ElevenLabs. Adam's out today, but the content reflects his thinking — scripts are written by Adam and Claude, grounded in his research and his courses at UC Berkeley Haas. AI makes mistakes, so always check the sources. Here's what we're looking at."`;
+
+const OUTRO_DIALOGUE = `MEGAN: "That's The Overhang for today. Reminder: this show is made with AI — my voice is synthetic, Adam's is a clone. We try to get it right, but check anything that matters. See you next time."`;
+
+const OUTRO_MEGAN_ONLY = `"That's The Overhang for today. Reminder: this show is made with AI, and AI makes mistakes — check anything that matters. See you next time."`;
 
 // ─── DIALOGUE PARSER ─────────────────────────────────────────────────────────
 // Splits a dialogue script into { speaker, text } turns for text-to-dialogue API.
@@ -344,10 +347,11 @@ app.post('/api/episodes/import', (req, res) => {
   const { script: rawScript, title, episode_type } = req.body;
   if (!rawScript) return res.status(400).json({ error: 'script required' });
 
-  // Prepend fixed intro (same as generate flow).
-  // .txt files pushed via push-to-railway should contain only the episode body — not the intro.
+  // Prepend fixed intro and append fixed outro (same as generate flow).
+  // .txt files pushed via push-to-railway should contain only the episode body — not the intro/outro.
   const intro = episode_type === 'megan_only' ? INTRO_MEGAN_ONLY : INTRO_DIALOGUE;
-  const script = `${intro}\n\n${rawScript}`;
+  const outro = episode_type === 'megan_only' ? OUTRO_MEGAN_ONLY : OUTRO_DIALOGUE;
+  const script = `${intro}\n\n${rawScript}\n\n${outro}`;
 
   const lastEp = db.prepare('SELECT MAX(number) as n FROM episodes').get();
   const episodeNumber = (lastEp.n || 0) + 1;
@@ -523,6 +527,7 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 - Close with a brief forward-looking thought or question to sit with
 - Reference sources naturally by name/outlet, not by number
 - Do NOT include any host introduction or show intro — that is handled separately and will be prepended. Begin immediately with the episode content.
+- Do NOT include any outro or sign-off — that is handled separately and will be appended. End with your episode-specific closing thought or question only.
 - Do NOT start with "Welcome" or "Hello" — open in medias res with a brief orienting sentence about today's themes
 
 **Tone and intellectual stance — this is critical:**
@@ -532,6 +537,14 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 - Hold companies, researchers, and policymakers accountable to the evidence — but do not assume bad faith where incompetence or structural incentives are a sufficient explanation.
 - Do not moralize. Present tensions and tradeoffs clearly and let the listener draw their own conclusions.
 - The goal is rigorous, intellectually honest analysis — the kind a thoughtful academic would be proud to assign.
+
+**Writing Adam's lines — dialogue episodes:**
+- Adam is a professor but he talks like a person. His lines should sound like office hours, not a lecture.
+- Use contractions always. Use sentence fragments when natural. Let him interrupt himself or revise mid-thought.
+- He swears casually when it fits — "shit," "fucking," "damn" — not for shock value, just because that's how he talks.
+- He's direct and sometimes blunt. He doesn't soften things unnecessarily.
+- Examples of the register: "Yeah, and that's the part that actually concerns me." / "I mean, shit — if that's the tradeoff they're making..." / "Look, I think they're wrong about this, and here's why."
+- Avoid: formal transitions ("Furthermore,"), academic hedging ("One might argue"), and anything that sounds like written prose being read aloud.
 
 Sources for today:
 ${sourcesForScript}
@@ -560,9 +573,10 @@ Example format:
         episodeTitle = '';
       }
 
-      // Prepend fixed intro
+      // Prepend fixed intro and append fixed outro
       const intro = episodeType === 'dialogue' ? INTRO_DIALOGUE : INTRO_MEGAN_ONLY;
-      script = `${intro}\n\n${script}`;
+      const outro = episodeType === 'dialogue' ? OUTRO_DIALOGUE : OUTRO_MEGAN_ONLY;
+      script = `${intro}\n\n${script}\n\n${outro}`;
 
       const wordCount = script.split(/\s+/).length;
       const durationEstimate = Math.round(wordCount / 150);
