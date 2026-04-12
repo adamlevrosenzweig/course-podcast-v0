@@ -72,11 +72,9 @@ The full Cowork-based episode workflow — topic briefing, Adam interview, scrip
 
 ## Cron Behavior
 
-The server runs a daily check at 9:00 AM Pacific. It generates a Megan-only episode automatically if:
-- Adam has not appeared in a `dialogue` episode for **more than 7 days**, AND
-- No episode of any kind has been published for **more than 3 days**
+The server runs a daily check at 9:00 AM Pacific. It generates a Megan-only episode automatically if no episode has been **published** in the last 3 days (drafts don't count). The generated episode is auto-published once audio is ready. This guarantees a maximum ~4-day gap between published episodes.
 
-This keeps the show alive during gaps. The cron respects the kill switch — it skips silently if the show is inactive.
+The cron respects the kill switch — it skips silently if the show is inactive.
 
 ---
 
@@ -91,7 +89,7 @@ The website is protected by password + TOTP (MFA). The RSS feed and audio files 
 - **Setup URL** (already used, one-time): `/setup`
 
 ### Security changes summary
-- All routes require auth except `/feed.xml`, `/audio/*`, and image files
+- All routes require auth except `/feed.xml`, `/audio/*`, `/episodes/:id/transcript`, and static image files (jpg, png, svg, etc.)
 - CORS locked to `BASE_URL` env var
 - Rate limiting on generation endpoints: 5 requests/hour/IP
 - `/api/config` removed (was exposing env var names)

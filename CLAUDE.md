@@ -44,12 +44,15 @@ Two methods — both check in `requireAuth` middleware:
 1. Cookie session (browser login via `/api/login`)
 2. `x-api-key` header — pass `ADMIN_PASSWORD` value directly, no session needed (used by CLI tools)
 
+Public routes (no auth required): `/feed.xml`, `/audio/*`, `/episodes/:id/transcript`, and all static image files (jpg, png, svg, etc.). The auth guard must explicitly exempt these — `express.static` runs AFTER the guard.
+
 ## API endpoints (key ones)
 
 - `POST /api/episodes/generate` — starts async episode generation job
 - `GET /api/episodes/generate/status` — poll generation progress
-- `POST /api/episodes/:id/audio` — starts async audio generation
+- `POST /api/episodes/:id/audio` — starts async audio generation; cancels any running job for that episode first
 - `GET /api/episodes/:id/audio/status` — poll audio progress
+- `GET /episodes/:id/transcript` — public; returns published episode script as `text/html`
 - `PATCH /api/episodes/:id/script` — update script and/or title
 - `PATCH /api/episodes/:id` — update status, publish_at, etc.
 - `POST /api/episodes/:id/sources/discover` — run web search to retroactively find sources for an episode (synchronous, ~10–20s)
@@ -71,18 +74,61 @@ Live URL: https://course-podcast-v0-production.up.railway.app/
 
 ## Script authoring conventions
 
-- **Intros:** Always hardcoded, always Megan-only (even in dialogue episodes). She discloses both voices as AI: hers fully synthetic (ElevenLabs), Adam's a clone of his real voice (also ElevenLabs).
-- **Outros:** Always hardcoded, always Megan-only. Appended after the generated episode content. Reminds listeners the show is made with AI and to verify anything that matters.
-- **Adam's dialogue style:** Casual register — contractions, sentence fragments, natural profanity ("shit," "fucking," "damn"). Sounds like office hours, not a lecture. No formal transitions or academic hedging.
+### Intros and outros (hardcoded, not generated)
+All four constants require the `MEGAN:` speaker prefix.
+
+- **`INTRO_DIALOGUE`**: Brief opener only — "Hey, I'm Megan, co-host of The Overhang. Let's get into it." No voice disclosure here.
+- **`INTRO_MEGAN_ONLY`**: Megan intro + voice disclosure (she's the only voice, so it belongs here).
+- **`OUTRO_DIALOGUE`** / **`OUTRO_MEGAN_ONLY`**: Brief accuracy caveat only. No voice disclosure in the outro.
+
+### Voice disclosure in dialogue episodes
+The generated script body (not the hardcoded intro) must include a natural disclosure in the first 1–2 exchanges that both voices are AI-generated — Adam's is a clone (ElevenLabs), Megan's is fully synthetic (ElevenLabs). This is a prompt requirement, not hardcoded. It should sound like something Adam would actually say, not a legal disclaimer.
+
+### Adam's dialogue style
+- Casual register — contractions, sentence fragments, natural profanity ("shit," "fucking," "damn")
+- Sounds like office hours, not a lecture. No formal transitions or academic hedging.
+- Gets excited, goes on tangents, occasionally disappears into the weeds before catching himself.
+
+### Megan's dialogue style
+- The straight voice — clear, grounded, always the listener's advocate
+- Warm with listeners; dry wit with Adam
+- When Adam goes off-rails, she reels him in patiently with light humor ("You're spiraling a little — bring it back.")
+- Does not moralize or editorialize. Smart, not smug.
+
+### Other conventions
 - **Title format:** `#N - Title - Month DD, YYYY` — generated at episode creation time, not at publish time.
 - **Imported episodes** (via `push-to-railway.js`) have no sources in the DB — that's expected, no web search ran.
 
-## RSS feed metadata
+## RSS feed
 
 - **Show title:** The Overhang
 - **Description:** "The overhang is the space between what technology can do and what society can handle. Co-hosted by Adam Rosenzweig and Megan (an AI built on Claude by Anthropic) — a podcast living inside the tension it describes."
-- **Cover art:** `podcast_cover_megan4.jpg` (served from `/public/`)
-- **Show notes:** Each episode's `<content:encoded>` is an HTML list of sources from the `sources` table. Episodes with no sources get an empty block.
+- **Cover art:** `podcast_cover_megan4.jpg` — 3000×3000 JPEG (Apple requires min 1400×1400)
+- **Explicit:** `true` on both channel and each episode item
+- **Show notes:** `<content:encoded>` contains episode_summary (or script excerpt) + HTML source list. Sources filtered to real HTTP/HTTPS URLs only — no pseudo-URLs.
+- **`<description>` tag:** Uses `episode_summary` if available, otherwise script excerpt.
+- **Transcripts:** `<podcast:transcript>` tag on each episode pointing to `/episodes/:id/transcript` with `type="text/html"`. Apple does not support `text/plain`.
+- **Episode art:** `<itunes:image>` on every item (same cover as show).
+- **Namespace:** `xmlns:podcast="https://podcastindex.org/namespace/1.0"` required for transcript tags.
+- **Cache-busting:** Image URL includes `?v=N` — increment when replacing the image file to force Apple to re-fetch.
+
+## Audio generation
+
+- Multi-chunk dialogue audio concatenated from ElevenLabs API calls; ID3v2 headers stripped from chunks after the first (prevents browser from reading only the first chunk's duration).
+- Audio jobs are in-memory (`audioJobs` object); server restart clears them (Railway restarts on every deploy).
+- When a new audio POST arrives, any running job for that episode is **cancelled** — new job always starts fresh. The async job checks for cancellation before writing output.
+- Episode is **re-read from DB** inside the async job body right before calling ElevenLabs — not captured at request time. This ensures regenerated audio always uses the latest saved script.
+- Audio files served with `Cache-Control: no-cache`.
+- Queue page appends `?v={timestamp}` to audio src when a job completes, forcing browser to fetch the new file.
+- Queue tab reconnects to in-progress audio jobs on mount — navigating away and back resumes status polling.
+
+## Fallback cron
+
+- Runs daily at 9:00 AM Pacific, Sun–Fri
+- Fires if no episode has been **published** in the last 3 days (drafts don't count)
+- Generates a Megan-only episode, waits for audio, then **auto-publishes**
+- Guarantees a maximum ~4-day gap between published episodes
+- Respects the kill switch — skips silently if the show is inactive
 
 ## Continuous learning loop
 
@@ -91,18 +137,3 @@ The app improves its own output over time using three feedback mechanisms, all i
 1. **Script edit tracking** — `original_script` stores the AI-generated draft (never overwritten). When Adam saves edits, a Haiku call summarizes what changed and stores it in `edit_summary`. Last 5 edit summaries are injected into the next script prompt.
 2. **Listener feedback → script writing** — the `feedback` table feeds into both the source discovery prompt and the script writing prompt.
 3. **Cross-episode narrative memory** — after each episode is generated, a Haiku call writes a 2-3 sentence `episode_summary` of the episode's central arguments. Last 5 summaries are injected into the next script prompt for narrative continuity.
-
-## Recent changes (April 2026)
-
-- Fixed corrupt server.js (null bytes from failed base64 encoding)
-- Added x-api-key header support to `requireAuth`
-- Contribute tab now accepts URL, pasted text, and file upload
-- Queue tab edit-script view: editable title + "Save & regenerate audio" button
-- Restored RSS feed title/description to The Overhang branding (had been overwritten)
-- Megan-only intros with dual voice disclosure; fixed outros appended to every episode
-- Adam's dialogue style prompt updated for casual/vernacular register with natural profanity
-- RSS show notes now include sources via `<content:encoded>`
-- Added continuous learning loop: script edit tracking, feedback routing to writer, cross-episode narrative memory
-- Added retroactive source discovery (`POST /api/episodes/:id/sources/discover`) with UI button in Archive and Today views
-- Fixed audio player duration: strip ID3v2 headers from concatenated MP3 chunks so browser reports correct total length
-- Updated RSS cover art to `podcast_cover_overhang1.png`

@@ -1041,10 +1041,11 @@ app.get('/feed.xml', (req, res) => {
     const audioSize = fs.existsSync(audioPath) ? fs.statSync(audioPath).size : 0;
     const pubDate = new Date(ep.date).toUTCString();
     const duration = ep.duration_estimate ? `${ep.duration_estimate}:00` : '0:00';
-    // Use episode_summary if available, otherwise fall back to a short script excerpt
+    // Use episode_summary if available, otherwise fall back to the episode title.
+    // Never use a raw script excerpt — it always starts with hardcoded intro lines.
     const summaryText = ep.episode_summary
       ? fixEncoding(ep.episode_summary)
-      : (ep.script ? fixEncoding(ep.script.substring(0, 300)) + '…' : `Episode ${ep.number}`);
+      : fixEncoding(ep.title || `Episode ${ep.number}`);
     const description = escXml(summaryText);
 
     // Only include sources with a real HTTP(S) URL — no pseudo-URLs, no nulls
