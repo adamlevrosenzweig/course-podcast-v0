@@ -271,8 +271,9 @@ app.get('/api/contributed', (req, res) => {
 
 app.post('/api/contributed', (req, res) => {
   const { url, note } = req.body;
-  if (!url) return res.status(400).json({ error: 'url required' });
-  const result = db.prepare('INSERT INTO contributed_urls (url, note) VALUES (?, ?)').run(url, note || null);
+  if (!url && !note) return res.status(400).json({ error: 'url or content required' });
+  const effectiveUrl = url || `text://paste-${Date.now()}`;
+  const result = db.prepare('INSERT INTO contributed_urls (url, note) VALUES (?, ?)').run(effectiveUrl, note || null);
   res.json(db.prepare('SELECT * FROM contributed_urls WHERE id = ?').get(result.lastInsertRowid));
 });
 
@@ -413,7 +414,12 @@ app.post('/api/episodes/generate', async (req, res) => {
       job.step = 'Searching for sources...';
       const themeList = themes.map(t => `- ${t.name} (${t.course.replace('_', ' ')})`).join('\n');
       const contributedSection = pendingUrls.length > 0
-        ? `\n\nThe following URLs have been manually contributed and MUST be included as sources:\n${pendingUrls.map(u => `- ${u.url}${u.note ? ` (note: ${u.note})` : ''}`).join('\n')}`
+        ? `\n\nThe following sources have been manually contributed and MUST be included:\n${pendingUrls.map(u => {
+            if (u.url.startsWith('text://')) {
+              return `- [FULL TEXT PROVIDED — use as a source, do not search for it] ${u.note}`;
+            }
+            return `- ${u.url}${u.note ? ` (note: ${u.note})` : ''}`;
+          }).join('\n')}`
         : '';
 
       const recentFeedback = db.prepare(`
@@ -431,7 +437,9 @@ app.post('/api/episodes/generate', async (req, res) => {
           ).join('\n')}`
         : '';
 
-      const discoveryPrompt = `You are a research assistant for a UC Berkeley professor who teaches two courses:\n\n1. **Intimate Technology** (an undergrad business course): Explores how technology mediates human intimacy, vulnerability, and connection. Key themes include AI companions, surveillance capitalism, haptic technology, digital intimacy, consent and data, companion robots, policy and regulation of intimate tech, ethics of consequence-free caregiving, identity performance and networked life.
+      const discoveryPrompt = `You are a research assistant for a UC Berkeley professor who teaches two courses:
+
+1. **Intimate Technology** (an undergrad business course): Explores how technology mediates human intimacy, vulnerability, and connection. Key themes include AI companions, surveillance capitalism, haptic technology, digital intimacy, consent and data, companion robots, policy and regulation of intimate tech, ethics of consequence-free caregiving, identity performance and networked life.
 
 2. **Social Impact Strategy in Commercial Tech** (MBA 290T): Explores how commercial technology companies navigate social impact. Key themes include corporate responsibility, ESG and tech, algorithmic harm, technology policy, ethical product design, stakeholder capitalism, social entrepreneurship in tech, the tension between growth and social good.
 
@@ -498,7 +506,10 @@ Return ONLY a valid JSON array of source objects. No other text.`;
         ? `\nRecent episode titles (do NOT reuse these themes or framings — avoid reusing the same nouns, framings, or conceptual hooks):\n${recentTitles.map(t => `- ${t}`).join('\n')}\n`
         : '';
 
-      const scriptPrompt = `You are the host of a daily podcast briefing for a UC Berkeley Haas professor named Adam. Adam teaches two courses:\n\n1. **Intimate Technology** — how technology mediates human intimacy, vulnerability, and connection\n2. **Social Impact Strategy in Commercial Tech** — how commercial tech companies navigate social impact, intentionally and otherwise
+      const scriptPrompt = `You are the host of a daily podcast briefing for a UC Berkeley Haas professor named Adam. Adam teaches two courses:
+
+1. **Intimate Technology** — how technology mediates human intimacy, vulnerability, and connection
+2. **Social Impact Strategy in Commercial Tech** — how commercial tech companies navigate social impact, intentionally and otherwise
 
 Both courses share territory: how technology affects vulnerable populations, how business models shape social outcomes, and where ethics and commercial incentives collide.
 
@@ -801,9 +812,9 @@ app.get('/feed.xml', (req, res) => {
     .replace(/Â·/g, '·')
     .replace(/â€™/g, '’')
     .replace(/â€œ/g, '“')
-    .replace(/â€\u009D/g, '”')
-    .replace(/â€"/g, '–')
-    .replace(/â€"/g, '—');
+    .replace(/â€/g, '”')
+    .replace(/â€“/g, '–')
+    .replace(/â€”/g, '—');
 
   const escXml = (str = '') => fixEncoding(str)
     .replace(/&/g, '&amp;')
