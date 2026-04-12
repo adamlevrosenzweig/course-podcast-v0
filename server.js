@@ -737,9 +737,10 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
   if (!episode) return res.status(404).json({ error: 'Episode not found' });
   if (!episode.script) return res.status(400).json({ error: 'Episode has no script' });
 
-  // If already running for this episode, return current job
-  const running = Object.values(audioJobs).find(j => j.episodeId === req.params.id && j.status === 'running');
-  if (running) return res.json({ status: 'running', jobId: running.jobId });
+  // Cancel any running job for this episode so regeneration always uses the latest script
+  Object.values(audioJobs)
+    .filter(j => j.episodeId === req.params.id && j.status === 'running')
+    .forEach(j => { j.status = 'cancelled'; });
 
   const jobId = Date.now().toString();
   audioJobs[jobId] = { jobId, episodeId: req.params.id, status: 'running', step: 'Connecting to ElevenLabs...', startedAt: Date.now() };
@@ -818,6 +819,12 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
           }
         );
         audioData = response.data;
+      }
+
+      // Abort if a newer job cancelled this one while ElevenLabs was running
+      if (job.status === 'cancelled') {
+        console.log(`[audio] Job ${jobId} was cancelled — discarding output.`);
+        return;
       }
 
       job.step = 'Saving audio file...';
