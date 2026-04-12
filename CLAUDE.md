@@ -68,10 +68,26 @@ The server assigns a `text://paste-{timestamp}` pseudo-URL so the NOT NULL const
 Push to `main` → Railway auto-deploys in ~60 seconds.
 Live URL: https://course-podcast-v0-production.up.railway.app/
 
+## Script authoring conventions
+
+- **Intros:** Always hardcoded, always Megan-only (even in dialogue episodes). She discloses both voices as AI: hers fully synthetic (ElevenLabs), Adam's a clone of his real voice (also ElevenLabs).
+- **Outros:** Always hardcoded, always Megan-only. Appended after the generated episode content. Reminds listeners the show is made with AI and to verify anything that matters.
+- **Adam's dialogue style:** Casual register — contractions, sentence fragments, natural profanity ("shit," "fucking," "damn"). Sounds like office hours, not a lecture. No formal transitions or academic hedging.
+- **Title format:** `#N - Title - Month DD, YYYY` — generated at episode creation time, not at publish time.
+- **Imported episodes** (via `push-to-railway.js`) have no sources in the DB — that's expected, no web search ran.
+
+## RSS feed metadata
+
+- **Show title:** The Overhang
+- **Description:** "The overhang is the space between what technology can do and what society can handle. Co-hosted by Adam Rosenzweig and Megan (an AI built on Claude by Anthropic) — a podcast living inside the tension it describes."
+- **Cover art:** `podcast_cover_v2.png` (served from `/public/`)
+
 ## Recent changes (April 2026)
 
 - Fixed corrupt server.js (null bytes from failed base64 encoding)
 - Added x-api-key header support to `requireAuth`
 - Contribute tab now accepts URL, pasted text, and file upload
 - Queue tab edit-script view: editable title + "Save & regenerate audio" button
-- Episode 5 ("what is this podcast") pushed as draft with audio
+- Restored RSS feed title/description to The Overhang branding (had been overwritten)
+- Megan-only intros with dual voice disclosure; fixed outros appended to every episode
+- Adam's dialogue style prompt updated for casual/vernacular register with natural profanity

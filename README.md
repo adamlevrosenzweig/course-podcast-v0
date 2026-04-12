@@ -34,7 +34,7 @@ Tell Claude "kill the podcast" (or call `POST /api/settings/active { active: fal
 
 ### Step 2 — Remove from Apple Podcasts
 1. Go to [podcastsconnect.apple.com](https://podcastsconnect.apple.com)
-2. Find **Course Briefing – Adam Rosenzweig**
+2. Find **The Overhang**
 3. Click the podcast → **My Podcasts** → select it → bottom of page → **Remove from Apple Podcasts**
 4. Apple will delist it within a few days. For faster removal, submit a request via [Apple Podcasts Support](https://podcastsupport.apple.com).
 
