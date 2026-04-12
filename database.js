@@ -22,6 +22,8 @@ try { db.exec("ALTER TABLE episodes ADD COLUMN publish_at TEXT"); } catch (_) {}
 // Script edit tracking
 try { db.exec('ALTER TABLE episodes ADD COLUMN original_script TEXT'); } catch (_) {}
 try { db.exec('ALTER TABLE episodes ADD COLUMN edit_summary TEXT'); } catch (_) {}
+// Cross-episode narrative memory
+try { db.exec('ALTER TABLE episodes ADD COLUMN episode_summary TEXT'); } catch (_) {}
 // All existing episodes are already live — mark them published
 try { db.exec("UPDATE episodes SET status = 'published' WHERE status IS NULL OR status = ''"); } catch (_) {}
 db.exec(`PRAGMA foreign_keys = ON`);

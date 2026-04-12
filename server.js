@@ -540,6 +540,14 @@ Return ONLY a valid JSON array of source objects. No other text.`;
         ? `\nRecent episode titles (do NOT reuse these themes or framings — avoid reusing the same nouns, framings, or conceptual hooks):\n${recentTitles.map(t => `- ${t}`).join('\n')}\n`
         : '';
 
+      // Fetch recent episode summaries for narrative continuity
+      const recentEpisodeSummaries = db.prepare(
+        `SELECT number, title, episode_summary FROM episodes WHERE episode_summary IS NOT NULL ORDER BY number DESC LIMIT 5`
+      ).all();
+      const narrativeContextBlock = recentEpisodeSummaries.length
+        ? `\n\n**Recent episodes (for narrative continuity — build on threads, don't repeat arguments):**\n${recentEpisodeSummaries.reverse().map(e => `- Episode ${e.number} (${e.title}): ${e.episode_summary}`).join('\n')}`
+        : '';
+
       // Fetch edit summaries from past episodes — Adam's edits are signal about his preferences
       const editSummaries = db.prepare(
         `SELECT number, edit_summary FROM episodes WHERE edit_summary IS NOT NULL ORDER BY number DESC LIMIT 5`
@@ -586,7 +594,7 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 
 Sources for today:
 ${sourcesForScript}
-${editLearningBlock}${feedbackSection}
+${narrativeContextBlock}${editLearningBlock}${feedbackSection}
 
 Return a JSON object with exactly two fields:
 - "title": a short, punchy 4–7 word title capturing today's central theme. Must be distinct from any recent episode titles — avoid reusing the same nouns, framings, or conceptual hooks.${recentTitlesBlock}
@@ -651,6 +659,31 @@ Example format:
       job.step = 'Done';
       job.episodeId = Number(episodeId);
       job.episode = episode;
+
+      // Fire-and-forget: summarize episode content for cross-episode narrative memory
+      (async () => {
+        try {
+          const summaryClient = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+          const summaryResponse = await summaryClient.messages.create({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 200,
+            messages: [{
+              role: 'user',
+              content: `Summarize this podcast episode in 2-3 sentences. Focus on the central arguments, conceptual frames, and thematic territory covered — not the specific news stories. This summary will be used to give future episodes context about what the show has already explored.
+
+SCRIPT:
+${script.substring(0, 4000)}
+
+Write only the summary, no preamble.`
+            }]
+          });
+          const epSummary = summaryResponse.content[0].text.trim();
+          db.prepare('UPDATE episodes SET episode_summary = ? WHERE id = ?').run(epSummary, episodeId);
+          console.log(`[generate] Episode ${episodeNumber} narrative summary saved`);
+        } catch (err) {
+          console.error('[generate] Episode summary generation failed:', err.message);
+        }
+      })();
 
       // Compile all scripts into Adam's Context running log
       try {
