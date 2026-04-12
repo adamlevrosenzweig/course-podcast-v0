@@ -1053,7 +1053,7 @@ app.get('/feed.xml', (req, res) => {
       <itunes:episode>${ep.number}</itunes:episode>
       <itunes:episodeType>full</itunes:episodeType>
       <itunes:explicit>true</itunes:explicit>
-      <itunes:image href="${BASE_URL}/podcast_cover_megan4.jpg"/>
+      <itunes:image href="${BASE_URL}/podcast_cover_megan4.jpg?v=2"/>
       <podcast:transcript url="${BASE_URL}/episodes/${ep.id}/transcript" type="text/plain"/>
     </item>`;
   }).join('');
@@ -1071,8 +1071,8 @@ app.get('/feed.xml', (req, res) => {
     <itunes:author>Adam Rosenzweig</itunes:author>
     <itunes:email>adam.lev.rosenzweig@gmail.com</itunes:email>
     <itunes:category text="Education"/>
-    <itunes:image href="${BASE_URL}/podcast_cover_megan4.jpg"/>
-    <image><url>${BASE_URL}/podcast_cover_megan4.jpg</url><title>The Overhang</title><link>${BASE_URL}</link></image>
+    <itunes:image href="${BASE_URL}/podcast_cover_megan4.jpg?v=2"/>
+    <image><url>${BASE_URL}/podcast_cover_megan4.jpg?v=2</url><title>The Overhang</title><link>${BASE_URL}</link></image>
     <itunes:explicit>true</itunes:explicit>
     <itunes:type>episodic</itunes:type>
     ${items}
