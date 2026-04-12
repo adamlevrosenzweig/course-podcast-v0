@@ -1067,10 +1067,9 @@ cron.schedule('0 0 * * *', async () => {
 console.log('[auto-publish] Midnight publish cron scheduled (Pacific time)');
 
 // ─── MEGAN-ONLY FALLBACK CRON ────────────────────────────────────────────────
-// Runs daily at 9:00 AM Pacific. Does NOT generate on a fixed schedule.
-// Only fires if Adam hasn't appeared in an episode for >7 days AND
-// no episode of any kind has been published for >3 days.
-// This keeps the show alive during gaps without requiring Adam's involvement.
+// Runs daily at 9:00 AM Pacific. Fires if no episode has been published in
+// the last 3 days — guaranteeing a maximum gap of ~4 days between episodes.
+// Generates a Megan-only episode, waits for audio, then auto-publishes.
 
 cron.schedule('0 9 * * 0-5', async () => {
   console.log('[cron] Running fallback check at', new Date().toISOString());
@@ -1088,21 +1087,17 @@ cron.schedule('0 9 * * 0-5', async () => {
 
   const now = new Date();
 
-  const lastDialogue = db.prepare(
-    "SELECT MAX(date) as d FROM episodes WHERE episode_type = 'dialogue'"
+  const lastPublished = db.prepare(
+    "SELECT MAX(date) as d FROM episodes WHERE status = 'published'"
   ).get();
-  const lastAny = db.prepare('SELECT MAX(date) as d FROM episodes').get();
 
-  const daysSinceDialogue = lastDialogue.d
-    ? (now - new Date(lastDialogue.d)) / (1000 * 60 * 60 * 24)
-    : 999;
-  const daysSinceAny = lastAny.d
-    ? (now - new Date(lastAny.d)) / (1000 * 60 * 60 * 24)
+  const daysSinceAny = lastPublished.d
+    ? (now - new Date(lastPublished.d)) / (1000 * 60 * 60 * 24)
     : 999;
 
-  console.log(`[cron] Days since dialogue: ${daysSinceDialogue.toFixed(1)}, days since any episode: ${daysSinceAny.toFixed(1)}`);
+  console.log(`[cron] Days since last published episode: ${daysSinceAny.toFixed(1)}`);
 
-  if (daysSinceDialogue <= 7 || daysSinceAny <= 3) {
+  if (daysSinceAny <= 3) {
     console.log('[cron] Fallback not needed, skipping.');
     return;
   }
@@ -1133,7 +1128,12 @@ cron.schedule('0 9 * * 0-5', async () => {
     while (Date.now() < audioDeadline) {
       await new Promise(r => setTimeout(r, 20000));
       const { data } = await axios.get(`${base}/api/episodes/${episodeId}`);
-      if (data.audio_filename) { console.log('[cron] Fallback audio ready:', data.audio_filename); return; }
+      if (data.audio_filename) {
+        console.log('[cron] Fallback audio ready:', data.audio_filename);
+        await axios.patch(`${base}/api/episodes/${episodeId}/status`, { status: 'published' });
+        console.log('[cron] Fallback episode published.');
+        return;
+      }
     }
     console.error('[cron] Audio generation timed out.');
   } catch (err) {
