@@ -52,6 +52,7 @@ Two methods — both check in `requireAuth` middleware:
 - `GET /api/episodes/:id/audio/status` — poll audio progress
 - `PATCH /api/episodes/:id/script` — update script and/or title
 - `PATCH /api/episodes/:id` — update status, publish_at, etc.
+- `POST /api/episodes/:id/sources/discover` — run web search to retroactively find sources for an episode (synchronous, ~10–20s)
 - `POST /api/contributed` — add URL, pasted text, or file to source queue
 - `GET /api/contributed` — list contributed sources
 
@@ -81,6 +82,15 @@ Live URL: https://course-podcast-v0-production.up.railway.app/
 - **Show title:** The Overhang
 - **Description:** "The overhang is the space between what technology can do and what society can handle. Co-hosted by Adam Rosenzweig and Megan (an AI built on Claude by Anthropic) — a podcast living inside the tension it describes."
 - **Cover art:** `podcast_cover_v2.png` (served from `/public/`)
+- **Show notes:** Each episode's `<content:encoded>` is an HTML list of sources from the `sources` table. Episodes with no sources get an empty block.
+
+## Continuous learning loop
+
+The app improves its own output over time using three feedback mechanisms, all injected into the script generation prompt:
+
+1. **Script edit tracking** — `original_script` stores the AI-generated draft (never overwritten). When Adam saves edits, a Haiku call summarizes what changed and stores it in `edit_summary`. Last 5 edit summaries are injected into the next script prompt.
+2. **Listener feedback → script writing** — the `feedback` table feeds into both the source discovery prompt and the script writing prompt.
+3. **Cross-episode narrative memory** — after each episode is generated, a Haiku call writes a 2-3 sentence `episode_summary` of the episode's central arguments. Last 5 summaries are injected into the next script prompt for narrative continuity.
 
 ## Recent changes (April 2026)
 
@@ -91,3 +101,6 @@ Live URL: https://course-podcast-v0-production.up.railway.app/
 - Restored RSS feed title/description to The Overhang branding (had been overwritten)
 - Megan-only intros with dual voice disclosure; fixed outros appended to every episode
 - Adam's dialogue style prompt updated for casual/vernacular register with natural profanity
+- RSS show notes now include sources via `<content:encoded>`
+- Added continuous learning loop: script edit tracking, feedback routing to writer, cross-episode narrative memory
+- Added retroactive source discovery (`POST /api/episodes/:id/sources/discover`) with UI button in Archive and Today views
