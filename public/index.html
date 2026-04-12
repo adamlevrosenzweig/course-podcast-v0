@@ -945,57 +945,122 @@ function SourcesPage() {
 // ── CONTRIBUTE PAGE ──────────────────────────────────────────────────────────
 
 function ContributePage() {
+  const [mode, setMode] = useState('url');
   const [url, setUrl] = useState('');
+  const [pasteTitle, setPasteTitle] = useState('');
+  const [pasteContent, setPasteContent] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [fileContent, setFileContent] = useState('');
   const [note, setNote] = useState('');
   const [pending, setPending] = useState([]);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    apiFetch('/api/contributed').then(setPending);
-  }, []);
+  useEffect(() => { apiFetch('/api/contributed').then(setPending); }, []);
+
+  async function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setFileName(file.name);
+    const text = await new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = ev => res(ev.target.result);
+      reader.onerror = rej;
+      reader.readAsText(file);
+    });
+    setFileContent(text);
+  }
 
   async function submit(e) {
     e.preventDefault();
-    if (!url.trim()) return;
+    setError('');
+    let submitUrl = '', submitNote = '';
+    if (mode === 'url') {
+      if (!url.trim()) return;
+      submitUrl = url;
+      submitNote = note;
+    } else if (mode === 'paste') {
+      if (!pasteContent.trim()) { setError('Content is required'); return; }
+      const title = pasteTitle.trim() || 'Pasted content';
+      submitNote = `[TITLE: ${title}]\n${pasteContent}${note ? '\n[CURATOR NOTE: ' + note + ']' : ''}`;
+    } else if (mode === 'file') {
+      if (!fileContent) { setError('No file loaded'); return; }
+      submitNote = `[FILE: ${fileName}]\n${fileContent}${note ? '\n[CURATOR NOTE: ' + note + ']' : ''}`;
+    }
     try {
-      await apiFetch('/api/contributed', { method: 'POST', body: { url, note } });
-      setUrl(''); setNote('');
+      await apiFetch('/api/contributed', { method: 'POST', body: { url: submitUrl || undefined, note: submitNote } });
+      setUrl(''); setPasteTitle(''); setPasteContent(''); setFileName(''); setFileContent(''); setNote('');
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
       const updated = await apiFetch('/api/contributed');
       setPending(updated);
-    } catch (e) { setError(e.message); }
+    } catch (err) { setError(err.message); }
   }
+
+  const tabBtn = (t, label) => (
+    <button onClick={() => setMode(t)} style={{
+      padding:'6px 16px', fontSize:'12px', fontWeight: mode===t ? 600 : 400,
+      color: mode===t ? 'var(--impact)' : 'var(--text-muted)',
+      background:'none', border:'none',
+      borderBottom: mode===t ? '2px solid var(--impact)' : '2px solid transparent',
+      cursor:'pointer', letterSpacing:'0.04em', textTransform:'uppercase', marginBottom:'-1px'
+    }}>{label}</button>
+  );
 
   const unused = pending.filter(u => !u.used);
   const used = pending.filter(u => u.used);
 
+  const displayUrl = (u) => u.url && (u.url.startsWith('text://') || u.url.startsWith('content://'))
+    ? <span style={{color:'var(--text-muted)',fontSize:'12px'}}>📄 Text / file content</span>
+    : <a href={u.url} target="_blank" rel="noopener">{u.url}</a>;
+
   return (
     <div>
       <h1 className="page-title">Contribute a Source</h1>
-      <p className="page-subtitle">Paste a URL to add it to the next episode's source pool</p>
+      <p className="page-subtitle">Add a URL, paste article text, or upload a file to the next episode's source pool</p>
 
       <div className="card">
+        <div style={{display:'flex',borderBottom:'1px solid var(--border)',marginBottom:'20px'}}>
+          {tabBtn('url','URL')}
+          {tabBtn('paste','Paste Text')}
+          {tabBtn('file','Upload File')}
+        </div>
         <form onSubmit={submit}>
-          <div className="form-group">
-            <label>URL</label>
-            <input
-              type="url"
-              value={url}
-              onChange={e => setUrl(e.target.value)}
-              placeholder="https://…"
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label>Note (optional)</label>
-            <textarea
-              value={note}
-              onChange={e => setNote(e.target.value)}
-              placeholder="Why this source matters, which course it connects to, anything to tell Claude…"
-            />
-          </div>
+          {mode === 'url' && (<>
+            <div className="form-group">
+              <label>URL</label>
+              <input type="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://…" required />
+            </div>
+            <div className="form-group">
+              <label>Note (optional)</label>
+              <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Why this source matters, which course it connects to, anything to tell Claude…" />
+            </div>
+          </>)}
+          {mode === 'paste' && (<>
+            <div className="form-group">
+              <label>Title</label>
+              <input type="text" value={pasteTitle} onChange={e => setPasteTitle(e.target.value)} placeholder="Article or source title" />
+            </div>
+            <div className="form-group">
+              <label>Content</label>
+              <textarea value={pasteContent} onChange={e => setPasteContent(e.target.value)} rows={8} placeholder="Paste article text or any content you want Claude to use as a source…" style={{lineHeight:'1.6'}} />
+            </div>
+            <div className="form-group">
+              <label>Note (optional)</label>
+              <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Which course this connects to, angle to take, anything to tell Claude…" />
+            </div>
+          </>)}
+          {mode === 'file' && (<>
+            <div className="form-group">
+              <label>File (.txt, .md, or any plain text)</label>
+              <input type="file" accept=".txt,.md,.text,.csv" onChange={handleFile} style={{color:'var(--text)',fontSize:'13px'}} />
+              {fileName && <div style={{marginTop:'6px',fontSize:'12px',color:'var(--text-muted)'}}>{fileName} · {fileContent.length.toLocaleString()} chars loaded</div>}
+            </div>
+            <div className="form-group">
+              <label>Note (optional)</label>
+              <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Which course this connects to, angle to take, anything to tell Claude…" />
+            </div>
+          </>)}
           <button type="submit" className="btn btn-primary">
             {saved ? '✓ Added' : 'Add to Queue'}
           </button>
@@ -1008,8 +1073,8 @@ function ContributePage() {
           <div className="section-label">Queued for next episode ({unused.length})</div>
           {unused.map(u => (
             <div key={u.id} className="source-item">
-              <div className="source-title"><a href={u.url} target="_blank" rel="noopener">{u.url}</a></div>
-              {u.note && <div className="source-summary">{u.note}</div>}
+              <div className="source-title">{displayUrl(u)}</div>
+              {u.note && <div className="source-summary">{u.note.substring(0,200)}{u.note.length>200?'…':''}</div>}
               <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'6px'}}>{new Date(u.created_at).toLocaleString()}</div>
             </div>
           ))}
@@ -1021,8 +1086,8 @@ function ContributePage() {
           <div className="section-label">Previously used</div>
           {used.map(u => (
             <div key={u.id} className="source-item" style={{opacity:0.6}}>
-              <div className="source-title"><a href={u.url} target="_blank" rel="noopener">{u.url}</a></div>
-              {u.note && <div className="source-summary">{u.note}</div>}
+              <div className="source-title">{displayUrl(u)}</div>
+              {u.note && <div className="source-summary">{u.note.substring(0,200)}{u.note.length>200?'…':''}</div>}
               <span className="tag tag-contributed" style={{marginTop:'6px',display:'inline-block'}}>Used in Ep. {u.episode_id}</span>
             </div>
           ))}
@@ -1289,6 +1354,20 @@ function QueuePage() {
     setSaving(s => ({ ...s, [ep.id]: false }));
   }
 
+  async function saveAndRegen(ep) {
+    setSaving(s => ({ ...s, [ep.id]: true }));
+    try {
+      await apiFetch(`/api/episodes/${ep.id}/script`, {
+        method: 'PATCH',
+        body: { script: editScript, title: editTitle }
+      });
+      setEditingId(null);
+      await load();
+      generateAudio(ep);
+    } catch(e) { setError(e.message); }
+    setSaving(s => ({ ...s, [ep.id]: false }));
+  }
+
   async function generateAudio(ep) {
     setAudioStatus(s => ({ ...s, [ep.id]: 'generating' }));
     try {
@@ -1362,9 +1441,12 @@ function QueuePage() {
                 rows={20}
                 style={{width:'100%',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'4px',padding:'12px',color:'var(--text)',fontSize:'13px',fontFamily:'monospace',lineHeight:'1.6',resize:'vertical'}}
               />
-              <div style={{display:'flex',gap:'8px',marginTop:'8px'}}>
+              <div style={{display:'flex',gap:'8px',marginTop:'8px',flexWrap:'wrap'}}>
                 <button className="btn btn-primary" onClick={() => saveScript(ep)} disabled={saving[ep.id]}>
                   {saving[ep.id] ? 'Saving…' : 'Save'}
+                </button>
+                <button className="btn" onClick={() => saveAndRegen(ep)} disabled={saving[ep.id]}>
+                  {saving[ep.id] ? 'Saving…' : '↻ Save & regenerate audio'}
                 </button>
                 <button className="btn" onClick={() => setEditingId(null)}>Cancel</button>
               </div>
@@ -1384,11 +1466,11 @@ function QueuePage() {
               </button>
             )}
 
-            {!ep.audio_filename && editingId !== ep.id && (
+            {editingId !== ep.id && (
               <button className="btn" onClick={() => generateAudio(ep)} disabled={!!audioStatus[ep.id] && audioStatus[ep.id] !== 'done' && audioStatus[ep.id] !== 'error'}>
                 {audioStatus[ep.id] && audioStatus[ep.id] !== 'done' && audioStatus[ep.id] !== 'error'
                   ? `⟳ ${audioStatus[ep.id]}`
-                  : '▶ Generate audio'}
+                  : ep.audio_filename ? '↻ Regenerate audio' : '▶ Generate audio'}
               </button>
             )}
 
