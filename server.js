@@ -843,10 +843,18 @@ app.get('/feed.xml', (req, res) => {
     const pubDate = new Date(ep.date).toUTCString();
     const duration = ep.duration_estimate ? `${ep.duration_estimate}:00` : '0:00';
     const description = escXml(ep.script ? ep.script.substring(0, 300) + '...' : `Episode ${ep.number}`);
+
+    const sources = db.prepare('SELECT title, url FROM sources WHERE episode_id = ? ORDER BY id').all(ep.id);
+    const sourcesHtml = sources.length > 0
+      ? `<h3>Sources</h3><ul>${sources.map(s => `<li><a href="${s.url}">${s.title}</a></li>`).join('')}</ul>`
+      : '';
+    const showNotes = `<![CDATA[${sourcesHtml}]]>`;
+
     return `
     <item>
       <title>${escXml(ep.title || `Episode ${ep.number}`)}</title>
       <description>${description}</description>
+      <content:encoded>${showNotes}</content:encoded>
       <pubDate>${pubDate}</pubDate>
       <enclosure url="${audioUrl}" length="${audioSize}" type="audio/mpeg"/>
       <guid isPermaLink="false">${BASE_URL}/episodes/${ep.id}</guid>
