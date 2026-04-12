@@ -996,10 +996,20 @@ app.get('/api/config', (req, res) => {
 // Public endpoint — Apple Podcasts fetches this URL from the RSS feed.
 
 app.get('/episodes/:id/transcript', (req, res) => {
-  const episode = db.prepare('SELECT script FROM episodes WHERE id = ? AND status = ?').get(req.params.id, 'published');
+  const episode = db.prepare('SELECT script, title FROM episodes WHERE id = ? AND status = ?').get(req.params.id, 'published');
   if (!episode || !episode.script) return res.status(404).send('Not found');
-  res.set('Content-Type', 'text/plain; charset=utf-8');
-  res.send(episode.script);
+
+  // Format as HTML — Apple Podcasts requires text/html, text/vtt, or SRT.
+  // We have no timestamps so HTML is the only viable option.
+  const lines = episode.script.split('\n').filter(l => l.trim());
+  const html = lines.map(line => {
+    const m = line.match(/^(ADAM|MEGAN):\s*"?(.*?)"?\s*$/s);
+    if (m) return `<p><strong>${m[1]}:</strong> ${m[2].replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`;
+    return `<p>${line.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`;
+  }).join('\n');
+
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  res.send(`<!DOCTYPE html><html><body>${html}</body></html>`);
 });
 
 // ─── RSS FEED (Apple Podcasts compatible) ────────────────────────────────────
@@ -1031,7 +1041,11 @@ app.get('/feed.xml', (req, res) => {
     const audioSize = fs.existsSync(audioPath) ? fs.statSync(audioPath).size : 0;
     const pubDate = new Date(ep.date).toUTCString();
     const duration = ep.duration_estimate ? `${ep.duration_estimate}:00` : '0:00';
-    const description = escXml(ep.script ? ep.script.substring(0, 300) + '...' : `Episode ${ep.number}`);
+    // Use episode_summary if available, otherwise fall back to a short script excerpt
+    const summaryText = ep.episode_summary
+      ? fixEncoding(ep.episode_summary)
+      : (ep.script ? fixEncoding(ep.script.substring(0, 300)) + '…' : `Episode ${ep.number}`);
+    const description = escXml(summaryText);
 
     // Only include sources with a real HTTP(S) URL — no pseudo-URLs, no nulls
     const sources = db.prepare('SELECT title, url FROM sources WHERE episode_id = ? AND url IS NOT NULL ORDER BY id').all(ep.id)
@@ -1039,7 +1053,7 @@ app.get('/feed.xml', (req, res) => {
     const sourcesHtml = sources.length > 0
       ? `<h3>Sources</h3><ul>${sources.map(s => `<li><a href="${escXml(s.url)}">${escXml(s.title || s.url)}</a></li>`).join('')}</ul>`
       : '';
-    const showNotes = `<![CDATA[${sourcesHtml}]]>`;
+    const showNotes = `<![CDATA[<p>${summaryText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>${sourcesHtml ? '<br>' + sourcesHtml : ''}]]>`;
 
     return `
     <item>
@@ -1054,7 +1068,7 @@ app.get('/feed.xml', (req, res) => {
       <itunes:episodeType>full</itunes:episodeType>
       <itunes:explicit>true</itunes:explicit>
       <itunes:image href="${BASE_URL}/podcast_cover_megan4.jpg?v=2"/>
-      <podcast:transcript url="${BASE_URL}/episodes/${ep.id}/transcript" type="text/plain"/>
+      <podcast:transcript url="${BASE_URL}/episodes/${ep.id}/transcript" type="text/html"/>
     </item>`;
   }).join('');
 
