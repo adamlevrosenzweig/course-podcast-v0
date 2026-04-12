@@ -220,9 +220,9 @@ app.post('/api/settings/active', (req, res) => {
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Auth guard — exempts RSS feed and audio (needed by podcast apps)
+// Auth guard — exempts RSS feed, audio, and episode transcripts (needed by podcast apps)
 app.use((req, res, next) => {
-  if (req.path === '/feed.xml' || req.path.startsWith('/audio/')) return next();
+  if (req.path === '/feed.xml' || req.path.startsWith('/audio/') || /^\/episodes\/\d+\/transcript$/.test(req.path)) return next();
   requireAuth(req, res, next);
 });
 
@@ -978,6 +978,16 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+// ─── EPISODE TRANSCRIPT ──────────────────────────────────────────────────────
+// Public endpoint — Apple Podcasts fetches this URL from the RSS feed.
+
+app.get('/episodes/:id/transcript', (req, res) => {
+  const episode = db.prepare('SELECT script FROM episodes WHERE id = ? AND status = ?').get(req.params.id, 'published');
+  if (!episode || !episode.script) return res.status(404).send('Not found');
+  res.set('Content-Type', 'text/plain; charset=utf-8');
+  res.send(episode.script);
+});
+
 // ─── RSS FEED (Apple Podcasts compatible) ────────────────────────────────────
 
 app.get('/feed.xml', (req, res) => {
@@ -1009,9 +1019,11 @@ app.get('/feed.xml', (req, res) => {
     const duration = ep.duration_estimate ? `${ep.duration_estimate}:00` : '0:00';
     const description = escXml(ep.script ? ep.script.substring(0, 300) + '...' : `Episode ${ep.number}`);
 
-    const sources = db.prepare('SELECT title, url FROM sources WHERE episode_id = ? ORDER BY id').all(ep.id);
+    // Only include sources with a real HTTP(S) URL — no pseudo-URLs, no nulls
+    const sources = db.prepare('SELECT title, url FROM sources WHERE episode_id = ? AND url IS NOT NULL ORDER BY id').all(ep.id)
+      .filter(s => /^https?:\/\//i.test(s.url));
     const sourcesHtml = sources.length > 0
-      ? `<h3>Sources</h3><ul>${sources.map(s => `<li><a href="${s.url}">${s.title}</a></li>`).join('')}</ul>`
+      ? `<h3>Sources</h3><ul>${sources.map(s => `<li><a href="${escXml(s.url)}">${escXml(s.title || s.url)}</a></li>`).join('')}</ul>`
       : '';
     const showNotes = `<![CDATA[${sourcesHtml}]]>`;
 
@@ -1026,13 +1038,17 @@ app.get('/feed.xml', (req, res) => {
       <itunes:duration>${duration}</itunes:duration>
       <itunes:episode>${ep.number}</itunes:episode>
       <itunes:episodeType>full</itunes:episodeType>
+      <itunes:explicit>true</itunes:explicit>
+      <itunes:image href="${BASE_URL}/podcast_cover_megan4.jpg"/>
+      <podcast:transcript url="${BASE_URL}/episodes/${ep.id}/transcript" type="text/plain"/>
     </item>`;
   }).join('');
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"
   xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
-  xmlns:content="http://purl.org/rss/modules/content/">
+  xmlns:content="http://purl.org/rss/modules/content/"
+  xmlns:podcast="https://podcastindex.org/namespace/1.0">
   <channel>
     <title>The Overhang</title>
     <description>The overhang is the space between what technology can do and what society can handle. Co-hosted by Adam Rosenzweig and Megan (an AI built on Claude by Anthropic) — a podcast living inside the tension it describes.</description>
@@ -1043,7 +1059,7 @@ app.get('/feed.xml', (req, res) => {
     <itunes:category text="Education"/>
     <itunes:image href="${BASE_URL}/podcast_cover_megan4.jpg"/>
     <image><url>${BASE_URL}/podcast_cover_megan4.jpg</url><title>The Overhang</title><link>${BASE_URL}</link></image>
-    <itunes:explicit>false</itunes:explicit>
+    <itunes:explicit>true</itunes:explicit>
     <itunes:type>episodic</itunes:type>
     ${items}
   </channel>
