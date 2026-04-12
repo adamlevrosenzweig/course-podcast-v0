@@ -587,6 +587,7 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 **Writing Adam's lines — dialogue episodes:**
 - Adam is a professor but he talks like a person. His lines should sound like office hours, not a lecture.
 - Use contractions always. Use sentence fragments when natural. Let him interrupt himself or revise mid-thought.
+- In the first 1–2 exchanges, Adam or Megan must naturally disclose that both voices are AI-generated — Adam's is a clone of his real voice (ElevenLabs), Megan's is fully synthetic (also ElevenLabs). Work it in organically, not as a legal disclaimer. It should feel like something Adam would actually say, not a recitation.
 - He swears casually when it fits — "shit," "fucking," "damn" — not for shock value, just because that's how he talks.
 - He's direct and sometimes blunt. He doesn't soften things unnecessarily.
 - Examples of the register: "Yeah, and that's the part that actually concerns me." / "I mean, shit — if that's the tradeoff they're making..." / "Look, I think they're wrong about this, and here's why."
