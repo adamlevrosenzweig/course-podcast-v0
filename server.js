@@ -745,20 +745,25 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
   (async () => {
     const job = audioJobs[jobId];
     try {
-      const audioFilename = `episode-${episode.number}-${episode.date}.mp3`;
+      // Re-read episode from DB so we always get the latest saved script,
+      // not the snapshot captured at request time.
+      const freshEpisode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(episode.id);
+      if (!freshEpisode || !freshEpisode.script) throw new Error('Episode or script not found');
+
+      const audioFilename = `episode-${freshEpisode.number}-${freshEpisode.date}.mp3`;
       const audioPath = path.join(AUDIO_DIR, audioFilename);
 
       job.step = 'Generating audio with ElevenLabs...';
 
       let audioData;
 
-      if (episode.episode_type === 'dialogue' && ELEVENLABS_ADAM_VOICE_ID) {
+      if (freshEpisode.episode_type === 'dialogue' && ELEVENLABS_ADAM_VOICE_ID) {
         // ── Two-speaker dialogue: chunked to stay under 5000-char API limit ──
-        const turns = parseDialogue(episode.script);
+        const turns = parseDialogue(freshEpisode.script);
         if (turns.length === 0) throw new Error('No dialogue turns found in script');
 
         const chunks = chunkTurns(turns);
-        console.log(`[audio] ${chunks.length} chunk(s) for episode ${episode.number}`);
+        console.log(`[audio] ${chunks.length} chunk(s) for episode ${freshEpisode.number}`);
 
         const buffers = [];
         for (let i = 0; i < chunks.length; i++) {
@@ -797,7 +802,7 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
         const response = await axios.post(
           `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
           {
-            text: episode.script,
+            text: freshEpisode.script,
             model_id: 'eleven_turbo_v2_5',
             voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true }
           },
@@ -812,7 +817,7 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
 
       job.step = 'Saving audio file...';
       fs.writeFileSync(audioPath, Buffer.from(audioData));
-      db.prepare('UPDATE episodes SET audio_filename = ? WHERE id = ?').run(audioFilename, episode.id);
+      db.prepare('UPDATE episodes SET audio_filename = ? WHERE id = ?').run(audioFilename, freshEpisode.id);
 
       job.status = 'complete';
       job.step = 'Done';
