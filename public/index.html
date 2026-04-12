@@ -1362,11 +1362,27 @@ function QueuePage() {
   const load = async () => {
     try {
       const all = await apiFetch('/api/episodes');
-      setEpisodes(all.filter(e => e.status === 'draft' || e.status === 'scheduled'));
-    } catch(e) { setError(e.message); }
-    setLoading(false);
+      const drafts = all.filter(e => e.status === 'draft' || e.status === 'scheduled');
+      setEpisodes(drafts);
+      return drafts;
+    } catch(e) { setError(e.message); return []; }
+    finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, []);
+
+  // On mount, reconnect to any in-progress audio jobs so navigating away
+  // and back doesn't leave the UI stuck.
+  useEffect(() => {
+    load().then(drafts => {
+      drafts.forEach(ep => {
+        apiFetch(`/api/episodes/${ep.id}/audio/status`).then(job => {
+          if (job && job.status === 'running') {
+            setAudioStatus(s => ({ ...s, [ep.id]: job.step || 'generating' }));
+            generateAudio(ep);
+          }
+        }).catch(() => {});
+      });
+    });
+  }, []);
 
   async function setStatus(ep, status) {
     setSaving(s => ({ ...s, [ep.id]: true }));
