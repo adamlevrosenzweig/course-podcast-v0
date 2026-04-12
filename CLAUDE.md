@@ -81,7 +81,7 @@ Live URL: https://course-podcast-v0-production.up.railway.app/
 
 - **Show title:** The Overhang
 - **Description:** "The overhang is the space between what technology can do and what society can handle. Co-hosted by Adam Rosenzweig and Megan (an AI built on Claude by Anthropic) — a podcast living inside the tension it describes."
-- **Cover art:** `podcast_cover_v2.png` (served from `/public/`)
+- **Cover art:** `podcast_cover_overhang1.png` (served from `/public/`)
 - **Show notes:** Each episode's `<content:encoded>` is an HTML list of sources from the `sources` table. Episodes with no sources get an empty block.
 
 ## Continuous learning loop
@@ -104,3 +104,5 @@ The app improves its own output over time using three feedback mechanisms, all i
 - RSS show notes now include sources via `<content:encoded>`
 - Added continuous learning loop: script edit tracking, feedback routing to writer, cross-episode narrative memory
 - Added retroactive source discovery (`POST /api/episodes/:id/sources/discover`) with UI button in Archive and Today views
+- Fixed audio player duration: strip ID3v2 headers from concatenated MP3 chunks so browser reports correct total length
+- Updated RSS cover art to `podcast_cover_overhang1.png`
