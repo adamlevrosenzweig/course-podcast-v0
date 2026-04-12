@@ -81,7 +81,7 @@ Live URL: https://course-podcast-v0-production.up.railway.app/
 
 - **Show title:** The Overhang
 - **Description:** "The overhang is the space between what technology can do and what society can handle. Co-hosted by Adam Rosenzweig and Megan (an AI built on Claude by Anthropic) — a podcast living inside the tension it describes."
-- **Cover art:** `podcast_cover_overhang1.png` (served from `/public/`)
+- **Cover art:** `podcast_cover_megan4.jpg` (served from `/public/`)
 - **Show notes:** Each episode's `<content:encoded>` is an HTML list of sources from the `sources` table. Episodes with no sources get an empty block.
 
 ## Continuous learning loop
