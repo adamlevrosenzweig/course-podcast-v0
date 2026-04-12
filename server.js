@@ -843,6 +843,74 @@ app.get('/api/sources', (req, res) => {
   res.json(parsed);
 });
 
+// POST /api/episodes/:id/sources/discover
+// Runs web search based on episode script and saves discovered sources
+app.post('/api/episodes/:id/sources/discover', async (req, res) => {
+  const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+  if (!episode) return res.status(404).json({ error: 'Not found' });
+  if (!episode.script) return res.status(400).json({ error: 'Episode has no script' });
+
+  try {
+    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+    const today = new Date().toISOString().split('T')[0];
+
+    const discoveryPrompt = `You are a research assistant. The following is a podcast script discussing recent news and topics in technology, ethics, and social impact. Your job is to find the actual sources this script is based on, or the most authoritative recent sources covering the same stories.
+
+Search the web to find 6–12 high-quality sources that match what's discussed in this script. For each source found, provide a JSON object with:
+- title: article/story title
+- url: full URL
+- summary: 2–3 sentence summary of the key points
+- published_date: approximate date (YYYY-MM-DD format if known, otherwise use "${today}")
+- courses: array using "intimate_tech", "social_impact", or both — based on the topics covered
+
+Source quality requirements:
+- PREFER: established news outlets (NYT, Washington Post, The Guardian, The Atlantic, Wired, Bloomberg, Reuters, AP), academic and research publications, specialist tech/policy outlets (MIT Technology Review, IEEE Spectrum, rest of world, Politico, The Markup, The Verge for substantive pieces)
+- AVOID: content farms, SEO aggregators, press-release republishers, AI-generated content sites
+
+PODCAST SCRIPT:
+${episode.script.substring(0, 6000)}
+
+Return ONLY a valid JSON array of source objects. No other text.`;
+
+    const discoveryResponse = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8000,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages: [{ role: 'user', content: discoveryPrompt }]
+    });
+
+    let jsonText = '';
+    for (const block of discoveryResponse.content) {
+      if (block.type === 'text') jsonText += block.text;
+    }
+    const jsonMatch = jsonText.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return res.status(500).json({ error: 'Source discovery returned no results' });
+
+    const discovered = JSON.parse(jsonMatch[0]);
+
+    const insertSource = db.prepare(
+      'INSERT INTO sources (episode_id, title, url, summary, published_date, courses, contributed) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+    db.exec('BEGIN');
+    try {
+      for (const s of discovered) {
+        insertSource.run(episode.id, s.title || 'Untitled', s.url || null,
+          s.summary || null, s.published_date || today,
+          JSON.stringify(s.courses || []), 0);
+      }
+      db.exec('COMMIT');
+    } catch (txErr) { db.exec('ROLLBACK'); throw txErr; }
+
+    db.prepare('UPDATE episodes SET source_count = source_count + ? WHERE id = ?').run(discovered.length, episode.id);
+
+    const sources = db.prepare('SELECT * FROM sources WHERE episode_id = ? ORDER BY id').all(episode.id);
+    res.json({ discovered: discovered.length, sources });
+  } catch (err) {
+    console.error('[discover sources]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── FEEDBACK ────────────────────────────────────────────────────────────────
 
 app.get('/api/feedback', (req, res) => {

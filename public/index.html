@@ -501,6 +501,7 @@ function TodayPage({ onNavigate }) {
   const [feedbackNote, setFeedbackNote] = useState('');
   const [feedbackSource, setFeedbackSource] = useState('');
   const [feedback, setFeedback] = useState([]);
+  const [discoveringSources, setDiscoveringSources] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -576,6 +577,17 @@ function TodayPage({ onNavigate }) {
       setStatus('');
     }
     setGeneratingAudio(false);
+  }
+
+  async function discoverSources() {
+    if (!latest) return;
+    setDiscoveringSources(true);
+    setError('');
+    try {
+      await apiFetch(`/api/episodes/${latest.id}/sources/discover`, { method: 'POST', body: {} });
+      await load();
+    } catch(e) { setError(e.message); }
+    setDiscoveringSources(false);
   }
 
   async function submitFeedback(e) {
@@ -675,7 +687,14 @@ function TodayPage({ onNavigate }) {
           </div>
 
           {/* Sources */}
-          <div className="section-label">Sources ({(latest.sources || []).length})</div>
+          <div className="section-label" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span>Sources ({(latest.sources || []).length})</span>
+            {(latest.sources || []).length === 0 && (
+              <button className="btn btn-sm" onClick={discoverSources} disabled={discoveringSources}>
+                {discoveringSources ? '⟳ Discovering…' : '⊕ Discover sources'}
+              </button>
+            )}
+          </div>
           {(latest.sources || []).map(s => (
             <SourceCard key={s.id} source={s} showFeedback />
           ))}
@@ -823,6 +842,8 @@ function ArchivePage() {
   const [episodes, setEpisodes] = useState([]);
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [discoveringId, setDiscoveringId] = useState(null);
+  const [discoverError, setDiscoverError] = useState('');
 
   useEffect(() => {
     apiFetch('/api/episodes').then(eps => { setEpisodes(eps); setLoading(false); });
@@ -831,6 +852,17 @@ function ArchivePage() {
   async function selectEp(ep) {
     const full = await apiFetch(`/api/episodes/${ep.id}`);
     setSelected(full);
+  }
+
+  async function discoverSources(ep) {
+    setDiscoveringId(ep.id);
+    setDiscoverError('');
+    try {
+      const result = await apiFetch(`/api/episodes/${ep.id}/sources/discover`, { method: 'POST', body: {} });
+      const full = await apiFetch(`/api/episodes/${ep.id}`);
+      setSelected(full);
+    } catch(e) { setDiscoverError(e.message); }
+    setDiscoveringId(null);
   }
 
   if (loading) return <div style={{padding:'48px',color:'var(--text-muted)'}}>Loading…</div>;
@@ -854,7 +886,15 @@ function ArchivePage() {
 
       {selected.script && <div className="script-text">{selected.script}</div>}
 
-      <div className="section-label">Sources</div>
+      <div className="section-label" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <span>Sources ({(selected.sources || []).length})</span>
+        {(selected.sources || []).length === 0 && (
+          <button className="btn btn-sm" onClick={() => discoverSources(selected)} disabled={discoveringId === selected.id}>
+            {discoveringId === selected.id ? '⟳ Discovering…' : '⊕ Discover sources'}
+          </button>
+        )}
+      </div>
+      {discoverError && <div className="error-msg" style={{marginBottom:'12px'}}>{discoverError}</div>}
       {(selected.sources || []).map(s => <SourceCard key={s.id} source={s} />)}
     </div>
   );
