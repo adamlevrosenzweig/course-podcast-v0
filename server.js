@@ -847,8 +847,8 @@ app.get('/feed.xml', (req, res) => {
   xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
   xmlns:content="http://purl.org/rss/modules/content/">
   <channel>
-    <title>Course Briefing &#x2013; Adam Rosenzweig</title>
-    <description>Daily AI-generated briefings for Intimate Technology and Social Impact Strategy in Commercial Tech at UC Berkeley Haas.</description>
+    <title>The Overhang</title>
+    <description>The overhang is the space between what technology can do and what society can handle. Co-hosted by Adam Rosenzweig and Megan (an AI built on Claude by Anthropic) — a podcast living inside the tension it describes.</description>
     <link>${BASE_URL}</link>
     <language>en-us</language>
     <itunes:author>Adam Rosenzweig</itunes:author>
