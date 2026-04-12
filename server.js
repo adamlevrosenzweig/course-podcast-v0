@@ -220,9 +220,14 @@ app.post('/api/settings/active', (req, res) => {
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Auth guard — exempts RSS feed, audio, and episode transcripts (needed by podcast apps)
+// Auth guard — exempts RSS feed, audio, transcripts, and static assets (needed by podcast apps)
 app.use((req, res, next) => {
-  if (req.path === '/feed.xml' || req.path.startsWith('/audio/') || /^\/episodes\/\d+\/transcript$/.test(req.path)) return next();
+  if (
+    req.path === '/feed.xml' ||
+    req.path.startsWith('/audio/') ||
+    /^\/episodes\/\d+\/transcript$/.test(req.path) ||
+    /\.(jpg|jpeg|png|gif|svg|ico|webp)$/i.test(req.path)
+  ) return next();
   requireAuth(req, res, next);
 });
 
