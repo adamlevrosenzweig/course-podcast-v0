@@ -830,8 +830,12 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
       }
 
       job.step = 'Saving audio file...';
-      fs.writeFileSync(audioPath, Buffer.from(audioData));
-      db.prepare('UPDATE episodes SET audio_filename = ? WHERE id = ?').run(audioFilename, freshEpisode.id);
+      const audioBuffer = Buffer.from(audioData);
+      fs.writeFileSync(audioPath, audioBuffer);
+      // 128 kbps = 16000 bytes/sec — compute actual duration from buffer length
+      const audioDurationSeconds = Math.round(audioBuffer.length / 16000);
+      db.prepare('UPDATE episodes SET audio_filename = ?, audio_duration_seconds = ? WHERE id = ?')
+        .run(audioFilename, audioDurationSeconds, freshEpisode.id);
 
       job.status = 'complete';
       job.step = 'Done';
@@ -1040,7 +1044,14 @@ app.get('/feed.xml', (req, res) => {
     const audioPath = path.join(AUDIO_DIR, ep.audio_filename);
     const audioSize = fs.existsSync(audioPath) ? fs.statSync(audioPath).size : 0;
     const pubDate = new Date(ep.date).toUTCString();
-    const duration = ep.duration_estimate ? `${ep.duration_estimate}:00` : '0:00';
+    // Prefer measured duration, then derive from file size (128kbps), then fall back to word-count estimate
+    const duration = ep.audio_duration_seconds
+      ? ep.audio_duration_seconds
+      : audioSize > 0
+        ? Math.round(audioSize / 16000)
+        : ep.duration_estimate
+          ? ep.duration_estimate * 60
+          : 0;
     // Use episode_summary if available, otherwise fall back to the episode title.
     // Never use a raw script excerpt — it always starts with hardcoded intro lines.
     const summaryText = ep.episode_summary
@@ -1068,7 +1079,7 @@ app.get('/feed.xml', (req, res) => {
       <itunes:episode>${ep.number}</itunes:episode>
       <itunes:episodeType>full</itunes:episodeType>
       <itunes:explicit>true</itunes:explicit>
-      <itunes:image href="${BASE_URL}/podcast_cover_megan4.jpg?v=3"/>
+      <itunes:image href="${BASE_URL}/podcast_cover_megan4.jpg?v=4"/>
       <podcast:transcript url="${BASE_URL}/episodes/${ep.id}/transcript" type="text/html"/>
     </item>`;
   }).join('');
@@ -1086,8 +1097,8 @@ app.get('/feed.xml', (req, res) => {
     <itunes:author>Adam Rosenzweig</itunes:author>
     <itunes:email>adam.lev.rosenzweig@gmail.com</itunes:email>
     <itunes:category text="Education"/>
-    <itunes:image href="${BASE_URL}/podcast_cover_megan4.jpg?v=3"/>
-    <image><url>${BASE_URL}/podcast_cover_megan4.jpg?v=3</url><title>The Overhang</title><link>${BASE_URL}</link></image>
+    <itunes:image href="${BASE_URL}/podcast_cover_megan4.jpg?v=4"/>
+    <image><url>${BASE_URL}/podcast_cover_megan4.jpg?v=4</url><title>The Overhang</title><link>${BASE_URL}</link></image>
     <itunes:explicit>true</itunes:explicit>
     <itunes:type>episodic</itunes:type>
     ${items}
