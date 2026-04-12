@@ -586,7 +586,7 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 
 Sources for today:
 ${sourcesForScript}
-${editLearningBlock}
+${editLearningBlock}${feedbackSection}
 
 Return a JSON object with exactly two fields:
 - "title": a short, punchy 4–7 word title capturing today's central theme. Must be distinct from any recent episode titles — avoid reusing the same nouns, framings, or conceptual hooks.${recentTitlesBlock}
