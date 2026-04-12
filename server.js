@@ -771,7 +771,17 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
           );
           buffers.push(Buffer.from(response.data));
         }
-        audioData = Buffer.concat(buffers);
+        // Strip ID3v2 headers from all chunks after the first — otherwise the
+        // browser reads only the first chunk's duration from its ID3v2 header.
+        function stripId3v2(buf) {
+          if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) { // 'ID3'
+            const size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) |
+                         ((buf[8] & 0x7f) << 7)  |  (buf[9] & 0x7f);
+            return buf.slice(10 + size);
+          }
+          return buf;
+        }
+        audioData = Buffer.concat([buffers[0], ...buffers.slice(1).map(stripId3v2)]);
       } else {
         // ── Single-voice monologue: use text-to-speech endpoint ──────────────
         const response = await axios.post(
@@ -1016,8 +1026,8 @@ app.get('/feed.xml', (req, res) => {
     <itunes:author>Adam Rosenzweig</itunes:author>
     <itunes:email>adam.lev.rosenzweig@gmail.com</itunes:email>
     <itunes:category text="Education"/>
-    <itunes:image href="${BASE_URL}/podcast_cover_v2.png"/>
-    <image><url>${BASE_URL}/podcast_cover_v2.png</url><title>Course Briefing</title><link>${BASE_URL}</link></image>
+    <itunes:image href="${BASE_URL}/podcast_cover_overhang1.png"/>
+    <image><url>${BASE_URL}/podcast_cover_overhang1.png</url><title>The Overhang</title><link>${BASE_URL}</link></image>
     <itunes:explicit>false</itunes:explicit>
     <itunes:type>episodic</itunes:type>
     ${items}
