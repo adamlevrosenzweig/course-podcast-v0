@@ -238,7 +238,9 @@ app.use(express.static(path.join(__dirname, 'public'), {
     }
   }
 }));
-app.use('/audio', express.static(AUDIO_DIR));
+app.use('/audio', express.static(AUDIO_DIR, {
+  setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache')
+}));
 
 // ─── THEMES ──────────────────────────────────────────────────────────────────
 

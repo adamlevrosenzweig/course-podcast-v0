@@ -1358,6 +1358,7 @@ function QueuePage() {
   const [publishDate, setPublishDate] = useState({});
   const [saving, setSaving] = useState({});
   const [audioStatus, setAudioStatus] = useState({});
+  const [audioTimestamps, setAudioTimestamps] = useState({});
 
   const load = async () => {
     try {
@@ -1432,7 +1433,7 @@ function QueuePage() {
       while (!done) {
         await new Promise(r => setTimeout(r, 4000));
         const job = await apiFetch(`/api/episodes/${ep.id}/audio/status`);
-        if (job.status === 'complete') { done = true; setAudioStatus(s => ({ ...s, [ep.id]: 'done' })); await load(); }
+        if (job.status === 'complete') { done = true; setAudioStatus(s => ({ ...s, [ep.id]: 'done' })); setAudioTimestamps(s => ({ ...s, [ep.id]: Date.now() })); await load(); }
         else if (job.status === 'error') { done = true; setAudioStatus(s => ({ ...s, [ep.id]: 'error' })); setError(job.error); }
         else setAudioStatus(s => ({ ...s, [ep.id]: job.step || 'generating' }));
       }
@@ -1531,7 +1532,7 @@ function QueuePage() {
             )}
 
             {ep.audio_filename && (
-              <audio controls src={`/audio/${ep.audio_filename}`} style={{height:'32px',flex:'1',minWidth:'200px'}} />
+              <audio controls src={`/audio/${ep.audio_filename}${audioTimestamps[ep.id] ? `?v=${audioTimestamps[ep.id]}` : ''}`} style={{height:'32px',flex:'1',minWidth:'200px'}} />
             )}
 
             <div style={{display:'flex',gap:'6px',alignItems:'center',marginLeft:'auto'}}>
