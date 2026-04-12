@@ -123,13 +123,13 @@ app.post('/logout', (req, res) => {
 
 // ─── EPISODE INTROS ──────────────────────────────────────────────────────────
 
-const INTRO_DIALOGUE = `MEGAN: "Hey — I'm Megan, co-host of The Overhang. Quick housekeeping before we get into it: both voices on this show are AI. Mine is fully synthetic, built on ElevenLabs. Adam's is a clone of his real voice, also ElevenLabs. The scripts are written by Adam and Claude, grounded in Adam's research and his courses at UC Berkeley Haas. We fact-check our sources, but AI makes mistakes — if something sounds off, go verify it. Here's what's on our radar today."`;
+const INTRO_DIALOGUE = `MEGAN: “Hey — I’m Megan, co-host of The Overhang. Let’s get into it.”`;
 
-const INTRO_MEGAN_ONLY = `"Hey — I'm Megan, host of The Overhang. Quick note: my voice is fully synthetic, built on ElevenLabs. Adam's out today, but the content reflects his thinking — scripts are written by Adam and Claude, grounded in his research and his courses at UC Berkeley Haas. AI makes mistakes, so always check the sources. Here's what we're looking at."`;
+const INTRO_MEGAN_ONLY = `MEGAN: “Hey — I’m Megan, host of The Overhang. Adam’s out today, but the content reflects his thinking — scripts are written by Adam and Claude, grounded in his research and his courses at UC Berkeley Haas. My voice is fully synthetic, built on ElevenLabs. AI makes mistakes, so always check the sources. Here’s what we’re looking at.”`;
 
-const OUTRO_DIALOGUE = `MEGAN: "That's The Overhang for today. Reminder: this show is made with AI — my voice is synthetic, Adam's is a clone. We try to get it right, but check anything that matters. See you next time."`;
+const OUTRO_DIALOGUE = `MEGAN: “That’s The Overhang for today. We try to get it right, but check anything that matters. See you next time.”`;
 
-const OUTRO_MEGAN_ONLY = `"That's The Overhang for today. Reminder: this show is made with AI, and AI makes mistakes — check anything that matters. See you next time."`;
+const OUTRO_MEGAN_ONLY = `MEGAN: “That’s The Overhang for today. AI makes mistakes — check anything that matters. See you next time.”`;
 
 // ─── DIALOGUE PARSER ─────────────────────────────────────────────────────────
 // Splits a dialogue script into { speaker, text } turns for text-to-dialogue API.
@@ -590,8 +590,17 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 - In the first 1–2 exchanges, Adam or Megan must naturally disclose that both voices are AI-generated — Adam's is a clone of his real voice (ElevenLabs), Megan's is fully synthetic (also ElevenLabs). Work it in organically, not as a legal disclaimer. It should feel like something Adam would actually say, not a recitation.
 - He swears casually when it fits — "shit," "fucking," "damn" — not for shock value, just because that's how he talks.
 - He's direct and sometimes blunt. He doesn't soften things unnecessarily.
-- Examples of the register: "Yeah, and that's the part that actually concerns me." / "I mean, shit — if that's the tradeoff they're making..." / "Look, I think they're wrong about this, and here's why."
+- He gets excited and occasionally goes deep into a tangent or a weedy technical detail before catching himself.
+- Examples of the register: "Yeah, and that's the part that actually concerns me." / "I mean, shit — if that's the tradeoff they're making..." / "Look, I think they're wrong about this, and here's why." / "Okay wait, I'm getting into the weeds — the point is..."
 - Avoid: formal transitions ("Furthermore,"), academic hedging ("One might argue"), and anything that sounds like written prose being read aloud.
+
+**Writing Megan's lines — dialogue episodes:**
+- Megan is the straight voice. Clear, grounded, and always the listener's advocate — her job is to ask the question the listener is sitting with and keep the conversation on track.
+- With listeners she's warm and direct. They should always feel like she's on their side, not playing a role.
+- With Adam she has a dry wit. When he goes off on a tangent, gets too excited, or disappears into the weeds, she reels him back in — patiently, with light humor. Not impatient, not dismissive. Just: "okay, yeah, but..."
+- She doesn't moralize or editorialize. She's dry, not earnest. Smart, not smug.
+- Examples of the register: "Okay, but what does that actually mean for a normal person?" / "You're spiraling a little — bring it back." / "I love the energy, but you lost me at 'regulatory preemption.'" / "So the short version is...?" / "Right, but the lawsuit part — that's where it gets real."
+- Avoid: making Megan a hype machine or a yes-and bot. She pushes back. She clarifies. She's a co-host, not a straight man.
 
 Sources for today:
 ${sourcesForScript}
