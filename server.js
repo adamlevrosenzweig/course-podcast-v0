@@ -639,12 +639,13 @@ ${narrativeContextBlock}${editLearningBlock}${feedbackSection}
   ADAM: Right, and what's striking is...
   MEGAN: Exactly — so the question becomes...
 
-Return a JSON object with exactly two fields:
+Return a JSON object with exactly three fields:
 - "title": a short, punchy 4–7 word title capturing today's central theme. Must be distinct from any recent episode titles — avoid reusing the same nouns, framings, or conceptual hooks.${recentTitlesBlock}
 - "script": the full podcast script text
+- "used_source_indices": a JSON array of 0-based indices (into the sources list above) that you actually referenced or drew from in the script. Only include sources that materially informed the episode content. This controls what appears in show notes.
 
 Example format:
-{"title": "When Convenience Becomes Surveillance", "script": "ADAM: Quick one today...\nMEGAN: Let's get into it."}`;
+{"title": "When Convenience Becomes Surveillance", "script": "ADAM: Quick one today...\nMEGAN: Let's get into it.", "used_source_indices": [0, 2, 4, 5]}`;
 
       const scriptResponse = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
@@ -658,6 +659,10 @@ Example format:
         const parsed = JSON.parse(jsonText);
         script = parsed.script || rawResponse;
         episodeTitle = parsed.title || '';
+        if (Array.isArray(parsed.used_source_indices)) {
+          const usedSet = new Set(parsed.used_source_indices);
+          discoveredSources = discoveredSources.filter((_, i) => usedSet.has(i));
+        }
       } catch (_) {
         script = rawResponse;
         episodeTitle = '';
@@ -705,7 +710,7 @@ Example format:
         const markUsed = db.prepare('UPDATE contributed_urls SET used = 1, episode_id = ? WHERE id = ?');
         for (const u of pendingUrls) markUsed.run(episodeId, u.id);
       }
-      db.prepare('UPDATE episodes SET source_count = ? WHERE id = ?').run(discoveredSources.length, episodeId);
+      db.prepare('UPDATE episodes SET source_count = ? WHERE id = ?').run(discoveredSources.length, episodeId); // discoveredSources already filtered to cited-only
 
       const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(episodeId);
       job.status = 'complete';
@@ -924,6 +929,43 @@ app.get('/api/sources', (req, res) => {
 
 // POST /api/episodes/:id/sources/discover
 // Runs web search based on episode script and saves discovered sources
+app.delete('/api/sources/:id', (req, res) => {
+  const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(req.params.id);
+  if (!source) return res.status(404).json({ error: 'Not found' });
+  db.prepare('DELETE FROM sources WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.post('/api/episodes/:id/summarize', async (req, res) => {
+  const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+  if (!episode) return res.status(404).json({ error: 'Not found' });
+  if (!episode.script) return res.status(400).json({ error: 'No script to summarize' });
+  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  try {
+    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      messages: [{
+        role: 'user',
+        content: `Summarize this podcast episode in 2-3 sentences. Focus on the central arguments, conceptual frames, and thematic territory covered — not the specific news stories. This summary will be used as the episode description in podcast apps and to give future episodes context about what the show has already explored.
+
+SCRIPT:
+${episode.script.substring(0, 4000)}
+
+Write only the summary, no preamble.`
+      }]
+    });
+    const summary = response.content[0].text.trim();
+    db.prepare('UPDATE episodes SET episode_summary = ? WHERE id = ?').run(summary, episode.id);
+    console.log(`[summarize] Episode ${episode.number} summary saved`);
+    res.json({ ok: true, episode_summary: summary });
+  } catch (err) {
+    console.error('[summarize]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/episodes/:id/sources/discover', async (req, res) => {
   const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
   if (!episode) return res.status(404).json({ error: 'Not found' });

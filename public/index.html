@@ -745,7 +745,7 @@ function TodayPage({ onNavigate }) {
             )}
           </div>
           {(latest.sources || []).map(s => (
-            <SourceCard key={s.id} source={s} showFeedback />
+            <SourceCard key={s.id} source={s} showFeedback onDelete={id => setLatest(prev => ({...prev, sources: prev.sources.filter(x => x.id !== id)}))} />
           ))}
 
           {/* Feedback */}
@@ -811,13 +811,21 @@ function getOutlet(url) {
   } catch { return null; }
 }
 
-function SourceCard({ source }) {
+function SourceCard({ source, onDelete }) {
   const [showFb, setShowFb] = useState(false);
   const [note, setNote] = useState(``);
   const [saved, setSaved] = useState(false);
   const [existingNotes, setExistingNotes] = useState(
     source.notes ? source.notes.split('|||').filter(Boolean) : []
   );
+
+  async function deleteSource() {
+    if (!confirm(`Remove "${source.title || source.url}" from this episode's show notes?`)) return;
+    try {
+      await apiFetch(`/api/sources/${source.id}`, { method: 'DELETE' });
+      if (onDelete) onDelete(source.id);
+    } catch {}
+  }
 
   const courses = typeof source.courses === 'string' ? JSON.parse(source.courses) : (source.courses || []);
   const outlet = getOutlet(source.url);
@@ -867,6 +875,11 @@ function SourceCard({ source }) {
           style={{marginLeft: 'auto', fontSize: '11px', padding: '3px 8px', color: noteCount > 0 ? 'var(--accent)' : undefined}}
           onClick={() => setShowFb(s => !s)}
         >{noteCount > 0 ? `${noteCount} Note${noteCount > 1 ? 's' : ''}` : 'Add note'}</button>
+        {onDelete && (
+          <button onClick={deleteSource} title="Remove from show notes"
+            style={{background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'14px',padding:'0 2px',lineHeight:1,opacity:0.5}}
+            onMouseOver={e=>e.currentTarget.style.opacity=1} onMouseOut={e=>e.currentTarget.style.opacity=0.5}>✕</button>
+        )}
       </div>
       {showFb && (
         <div style={{marginTop: '12px'}}>
@@ -950,7 +963,7 @@ function ArchivePage() {
         )}
       </div>
       {discoverError && <div className="error-msg" style={{marginBottom:'12px'}}>{discoverError}</div>}
-      {(selected.sources || []).map(s => <SourceCard key={s.id} source={s} />)}
+      {(selected.sources || []).map(s => <SourceCard key={s.id} source={s} onDelete={id => setSelected(prev => ({...prev, sources: prev.sources.filter(x => x.id !== id)}))} />)}
     </div>
   );
 
