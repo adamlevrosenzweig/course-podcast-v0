@@ -725,18 +725,18 @@ Example format:
           const summaryClient = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
           const summaryResponse = await summaryClient.messages.create({
             model: 'claude-haiku-4-5-20251001',
-            max_tokens: 200,
+            max_tokens: 250,
             messages: [{
               role: 'user',
-              content: `Summarize this podcast episode in 2-3 sentences. Focus on the central arguments, conceptual frames, and thematic territory covered — not the specific news stories. This summary will be used to give future episodes context about what the show has already explored.
+              content: `Summarize this podcast episode in no more than 3 sentences. Focus on the central arguments, conceptual frames, and thematic territory covered — not the specific news stories. This summary will be used to give future episodes context about what the show has already explored.
 
 SCRIPT:
 ${script.substring(0, 4000)}
 
-Write only the summary — no preamble, no headers, no markdown.`
+Write only the summary — no preamble, no headers, no markdown. Do not begin with "Summary:" or any label.`
             }]
           });
-          const epSummary = summaryResponse.content[0].text.trim();
+          let epSummary = summaryResponse.content[0].text.trim().replace(/^summary[:\s\-—]*/i, '').trim();
           db.prepare('UPDATE episodes SET episode_summary = ? WHERE id = ?').run(epSummary, episodeId);
           console.log(`[generate] Episode ${episodeNumber} narrative summary saved`);
           // Auto-generate show notes now that summary + sources are both saved
@@ -964,18 +964,18 @@ app.post('/api/episodes/:id/summarize', async (req, res) => {
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
+      max_tokens: 250,
       messages: [{
         role: 'user',
-        content: `Summarize this podcast episode in 2-3 sentences. Focus on the central arguments, conceptual frames, and thematic territory covered — not the specific news stories. This summary will be used as the episode description in podcast apps and to give future episodes context about what the show has already explored.
+        content: `Summarize this podcast episode in no more than 3 sentences. Focus on the central arguments, conceptual frames, and thematic territory covered — not the specific news stories. This summary will be used as the episode description in podcast apps and to give future episodes context about what the show has already explored.
 
 SCRIPT:
 ${episode.script.substring(0, 4000)}
 
-Write only the summary — no preamble, no headers, no markdown.`
+Write only the summary — no preamble, no headers, no markdown. Do not begin with "Summary:" or any label.`
       }]
     });
-    const summary = response.content[0].text.trim();
+    const summary = response.content[0].text.trim().replace(/^summary[:\s\-—]*/i, '').trim();
     db.prepare('UPDATE episodes SET episode_summary = ? WHERE id = ?').run(summary, episode.id);
     console.log(`[summarize] Episode ${episode.number} summary saved`);
     res.json({ ok: true, episode_summary: summary });
@@ -1342,6 +1342,43 @@ cron.schedule('0 9 * * 0-5', async () => {
 });
 
 console.log('[cron] Megan-only fallback cron scheduled: 9:00 AM Pacific, Sun–Fri, skipping Jewish holidays');
+
+// One-time migration: re-summarize all episodes + regenerate show notes
+app.post('/api/admin/migrate/resync-summaries', requireAuth, async (req, res) => {
+  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+  const episodes = db.prepare('SELECT * FROM episodes WHERE script IS NOT NULL ORDER BY date ASC').all();
+  const results = { updated: 0, errors: [] };
+  for (const ep of episodes) {
+    try {
+      const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+      const response = await client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 250,
+        messages: [{
+          role: 'user',
+          content: `Summarize this podcast episode in no more than 3 sentences. Focus on the central arguments, conceptual frames, and thematic territory covered — not the specific news stories. This summary will be used as the episode description in podcast apps and to give future episodes context about what the show has already explored.
+
+SCRIPT:
+${ep.script.substring(0, 4000)}
+
+Write only the summary — no preamble, no headers, no markdown. Do not begin with "Summary:" or any label.`
+        }]
+      });
+      const summary = response.content[0].text.trim().replace(/^summary[:\s\-—]*/i, '').trim();
+      db.prepare('UPDATE episodes SET episode_summary = ? WHERE id = ?').run(summary, ep.id);
+      const show_notes = buildShowNotes(ep.id, summary);
+      db.prepare('UPDATE episodes SET show_notes = ? WHERE id = ?').run(show_notes, ep.id);
+      results.updated++;
+      console.log(`[resync-summaries] Episode ${ep.id} updated`);
+      // Small delay to avoid rate limits
+      await new Promise(r => setTimeout(r, 500));
+    } catch (err) {
+      console.error(`[resync-summaries] Episode ${ep.id} failed:`, err.message);
+      results.errors.push({ episode_id: ep.id, error: err.message });
+    }
+  }
+  res.json(results);
+});
 
 app.listen(PORT, () => {
   console.log(`Podcast Briefing server running on port ${PORT}`);
