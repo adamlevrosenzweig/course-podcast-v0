@@ -697,7 +697,7 @@ function TodayPage({ onNavigate }) {
               {latest.title || `Episode ${latest.number} · ${latest.date}`}
             </div>
             <div className="card-meta" style={{marginBottom: '14px'}}>
-              {latest.source_count} sources · ~{latest.duration_estimate} min · {latest.audio_filename ? 'Audio ready' : 'Script ready'}
+              {latest.source_count} sources{latest.audio_duration_seconds ? ` · ${Math.floor(latest.audio_duration_seconds/60)}:${String(latest.audio_duration_seconds%60).padStart(2,'0')}` : ''} · {latest.audio_filename ? 'Audio ready' : 'Script ready'}
             </div>
 
             {latest.audio_filename ? (
@@ -1045,7 +1045,7 @@ function ArchivePage() {
         <div key={ep.id} className="ep-item" onClick={() => selectEp(ep)}>
           <span className="ep-num">#{ep.number}</span>
           <span className="ep-title">{ep.title || ep.date}</span>
-          <span className="ep-meta">{ep.source_count} sources · ~{ep.duration_estimate} min</span>
+          <span className="ep-meta">{ep.source_count} sources{ep.audio_duration_seconds ? ` · ${Math.floor(ep.audio_duration_seconds/60)}:${String(ep.audio_duration_seconds%60).padStart(2,'0')}` : ''}</span>
         </div>
       ))}
     </div>
@@ -1748,7 +1748,7 @@ function QueuePage() {
                 {ep.title || `Episode ${ep.number}`}
               </div>
               <div style={{fontSize:'12px',color:'var(--text-muted)',marginTop:'4px'}}>
-                #{ep.number} · {ep.date} · {ep.episode_type} · ~{ep.duration_estimate || '?'} min
+                #{ep.number} · {ep.date} · {ep.episode_type}{ep.audio_duration_seconds ? ` · ${Math.floor(ep.audio_duration_seconds/60)}:${String(ep.audio_duration_seconds%60).padStart(2,'0')}` : ''}
                 {ep.audio_filename && <span style={{color:'var(--impact)',marginLeft:'8px'}}>● audio ready</span>}
               </div>
             </div>
