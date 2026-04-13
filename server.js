@@ -6,6 +6,7 @@ const fs = require('fs');
 const axios = require('axios');
 const crypto = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
+const mm = require('music-metadata');
 const db = require('./database');
 const cron = require('node-cron');
 
@@ -879,8 +880,8 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
       job.step = 'Saving audio file...';
       const audioBuffer = Buffer.from(audioData);
       fs.writeFileSync(audioPath, audioBuffer);
-      // 128 kbps = 16000 bytes/sec — compute actual duration from buffer length
-      const audioDurationSeconds = Math.round(audioBuffer.length / 16000);
+      const { format } = await mm.parseBuffer(audioBuffer, { mimeType: 'audio/mpeg' });
+      const audioDurationSeconds = Math.round(format.duration || audioBuffer.length / 16000);
       db.prepare('UPDATE episodes SET audio_filename = ?, audio_duration_seconds = ? WHERE id = ?')
         .run(audioFilename, audioDurationSeconds, freshEpisode.id);
 
@@ -1360,6 +1361,29 @@ cron.schedule('0 9 * * 0-5', async () => {
 });
 
 console.log('[cron] Megan-only fallback cron scheduled: 9:00 AM Pacific, Sun–Fri, skipping Jewish holidays');
+
+// One-time migration: backfill accurate audio durations by parsing MP3 metadata
+app.post('/api/admin/migrate/resync-durations', requireAuth, async (req, res) => {
+  const episodes = db.prepare('SELECT id, audio_filename FROM episodes WHERE audio_filename IS NOT NULL').all();
+  const results = { updated: 0, skipped: 0, errors: [] };
+  for (const ep of episodes) {
+    const audioPath = path.join(AUDIO_DIR, ep.audio_filename);
+    if (!fs.existsSync(audioPath)) { results.skipped++; continue; }
+    try {
+      const { format } = await mm.parseFile(audioPath, { duration: true });
+      const seconds = Math.round(format.duration || 0);
+      if (seconds > 0) {
+        db.prepare('UPDATE episodes SET audio_duration_seconds = ? WHERE id = ?').run(seconds, ep.id);
+        results.updated++;
+      } else {
+        results.skipped++;
+      }
+    } catch (err) {
+      results.errors.push({ episode_id: ep.id, error: err.message });
+    }
+  }
+  res.json(results);
+});
 
 // One-time migration: re-summarize all episodes + regenerate show notes
 app.post('/api/admin/migrate/resync-summaries', requireAuth, async (req, res) => {
