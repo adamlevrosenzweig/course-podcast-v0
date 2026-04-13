@@ -882,7 +882,7 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
       fs.writeFileSync(audioPath, audioBuffer);
       const { format } = await mm.parseBuffer(audioBuffer, { mimeType: 'audio/mpeg' });
       const audioDurationSeconds = Math.round(format.duration || audioBuffer.length / 16000);
-      db.prepare('UPDATE episodes SET audio_filename = ?, audio_duration_seconds = ? WHERE id = ?')
+      db.prepare('UPDATE episodes SET audio_filename = ?, audio_duration_seconds = ?, audio_updated_at = datetime(\'now\') WHERE id = ?')
         .run(audioFilename, audioDurationSeconds, freshEpisode.id);
 
       job.status = 'complete';

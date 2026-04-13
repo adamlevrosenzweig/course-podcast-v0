@@ -1856,7 +1856,7 @@ function QueuePage() {
             )}
 
             {ep.audio_filename && (
-              <audio controls src={`/audio/${ep.audio_filename}${audioTimestamps[ep.id] ? `?v=${audioTimestamps[ep.id]}` : ''}`} style={{height:'32px',flex:'1',minWidth:'200px'}} />
+              <audio controls src={`/audio/${ep.audio_filename}?v=${audioTimestamps[ep.id] || ep.audio_updated_at || ep.audio_filename}`} style={{height:'32px',flex:'1',minWidth:'200px'}} />
             )}
 
             <div style={{display:'flex',gap:'6px',alignItems:'center',marginLeft:'auto'}}>
