@@ -26,6 +26,8 @@ try { db.exec('ALTER TABLE episodes ADD COLUMN edit_summary TEXT'); } catch (_) 
 try { db.exec('ALTER TABLE episodes ADD COLUMN episode_summary TEXT'); } catch (_) {}
 // Actual audio duration (seconds) measured from file after generation
 try { db.exec('ALTER TABLE episodes ADD COLUMN audio_duration_seconds INTEGER'); } catch (_) {}
+// Editable show notes HTML — QC artifact before publishing to Apple Podcasts
+try { db.exec('ALTER TABLE episodes ADD COLUMN show_notes TEXT'); } catch (_) {}
 // All existing episodes are already live — mark them published
 try { db.exec("UPDATE episodes SET status = 'published' WHERE status IS NULL OR status = ''"); } catch (_) {}
 db.exec(`PRAGMA foreign_keys = ON`);

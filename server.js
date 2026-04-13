@@ -738,6 +738,10 @@ Write only the summary — no preamble, no headers, no markdown.`
           const epSummary = summaryResponse.content[0].text.trim();
           db.prepare('UPDATE episodes SET episode_summary = ? WHERE id = ?').run(epSummary, episodeId);
           console.log(`[generate] Episode ${episodeNumber} narrative summary saved`);
+          // Auto-generate show notes now that summary + sources are both saved
+          const show_notes = buildShowNotes(episodeId, epSummary);
+          db.prepare('UPDATE episodes SET show_notes = ? WHERE id = ?').run(show_notes, episodeId);
+          console.log(`[generate] Episode ${episodeNumber} show notes saved`);
         } catch (err) {
           console.error('[generate] Episode summary generation failed:', err.message);
         }
@@ -966,6 +970,38 @@ Write only the summary — no preamble, no headers, no markdown.`
   }
 });
 
+// Helper: assemble show notes HTML from episode_summary + sources
+function buildShowNotes(episodeId, episodeSummary) {
+  const summaryHtml = episodeSummary
+    ? `<p>${episodeSummary.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`
+    : '';
+  const sources = db.prepare('SELECT title, url FROM sources WHERE episode_id = ? AND url IS NOT NULL ORDER BY id').all(episodeId)
+    .filter(s => /^https?:\/\//i.test(s.url));
+  const sourcesHtml = sources.length > 0
+    ? `<h3>Sources</h3><ul>${sources.map(s => `<li><a href="${s.url.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">${(s.title || s.url).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</a></li>`).join('')}</ul>`
+    : '';
+  return summaryHtml + (sourcesHtml ? '<br>' + sourcesHtml : '');
+}
+
+// POST /api/episodes/:id/show-notes/generate — assemble and save show notes
+app.post('/api/episodes/:id/show-notes/generate', requireAuth, (req, res) => {
+  const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+  if (!episode) return res.status(404).json({ error: 'Not found' });
+  const show_notes = buildShowNotes(episode.id, episode.episode_summary);
+  db.prepare('UPDATE episodes SET show_notes = ? WHERE id = ?').run(show_notes, episode.id);
+  res.json({ ok: true, show_notes });
+});
+
+// PATCH /api/episodes/:id/show-notes — save manual edits
+app.patch('/api/episodes/:id/show-notes', requireAuth, (req, res) => {
+  const episode = db.prepare('SELECT id FROM episodes WHERE id = ?').get(req.params.id);
+  if (!episode) return res.status(404).json({ error: 'Not found' });
+  const { show_notes } = req.body;
+  if (typeof show_notes !== 'string') return res.status(400).json({ error: 'show_notes must be a string' });
+  db.prepare('UPDATE episodes SET show_notes = ? WHERE id = ?').run(show_notes, episode.id);
+  res.json({ ok: true });
+});
+
 app.post('/api/episodes/:id/sources/discover', async (req, res) => {
   const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
   if (!episode) return res.status(404).json({ error: 'Not found' });
@@ -1137,13 +1173,11 @@ app.get('/feed.xml', (req, res) => {
       : fixEncoding(ep.title || `Episode ${ep.number}`);
     const description = escXml(summaryText);
 
-    // Only include sources with a real HTTP(S) URL — no pseudo-URLs, no nulls
-    const sources = db.prepare('SELECT title, url FROM sources WHERE episode_id = ? AND url IS NOT NULL ORDER BY id').all(ep.id)
-      .filter(s => /^https?:\/\//i.test(s.url));
-    const sourcesHtml = sources.length > 0
-      ? `<h3>Sources</h3><ul>${sources.map(s => `<li><a href="${escXml(s.url)}">${escXml(s.title || s.url)}</a></li>`).join('')}</ul>`
-      : '';
-    const showNotes = `<![CDATA[<p>${summaryText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>${sourcesHtml ? '<br>' + sourcesHtml : ''}]]>`;
+    // Use stored show_notes if present (editable QC artifact); otherwise assemble dynamically for old episodes
+    const showNotesContent = ep.show_notes
+      ? fixEncoding(ep.show_notes)
+      : buildShowNotes(ep.id, ep.episode_summary ? fixEncoding(ep.episode_summary) : null);
+    const showNotes = `<![CDATA[${showNotesContent}]]>`;
 
     return `
     <item>
