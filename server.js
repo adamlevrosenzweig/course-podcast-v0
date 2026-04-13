@@ -1273,7 +1273,7 @@ app.get('*', (req, res) => {
 // Runs daily at midnight Pacific. Publishes any scheduled episode whose
 // publish_at date is today or earlier.
 
-cron.schedule('0 0 * * *', async () => {
+cron.schedule('0 5 * * *', async () => {
   const today = new Date().toISOString().split('T')[0];
   const due = db.prepare(
     "SELECT * FROM episodes WHERE status = 'scheduled' AND publish_at <= ?"
@@ -1290,7 +1290,7 @@ cron.schedule('0 0 * * *', async () => {
   }
 }, { timezone: 'America/Los_Angeles' });
 
-console.log('[auto-publish] Midnight publish cron scheduled (Pacific time)');
+console.log('[auto-publish] 5 AM publish cron scheduled (Pacific time)');
 
 // ─── MEGAN-ONLY FALLBACK CRON ────────────────────────────────────────────────
 // Runs daily at 9:00 AM Pacific. Fires if no episode has been published in
