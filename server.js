@@ -123,13 +123,13 @@ app.post('/logout', (req, res) => {
 
 // ─── EPISODE INTROS ──────────────────────────────────────────────────────────
 
-const INTRO_DIALOGUE = `MEGAN: “Hey — I’m Megan, co-host of The Overhang with Adam Rosenzweig. Quick note on what you’re hearing: both of our voices are AI-generated — Adam’s is cloned from his real voice using ElevenLabs, mine is fully synthetic. Scripts are written by Adam and Claude, grounded in his research and courses. We try to get it right, but check anything that matters. Here’s what we’re looking at.”`;
+const INTRO_DIALOGUE = `MEGAN: Hey — I’m Megan, co-host of The Overhang with Adam Rosenzweig. Quick note on what you’re hearing: both of our voices are AI-generated — Adam’s is cloned from his real voice using ElevenLabs, mine is fully synthetic. Scripts are written by Adam and Claude, grounded in his research and courses. We try to get it right, but check anything that matters. Here’s what we’re looking at.`;
 
-const INTRO_MEGAN_ONLY = `MEGAN: “Hey — I’m Megan, host of The Overhang — the podcast from Adam Rosenzweig. Adam’s out today. My voice is fully synthetic, built on ElevenLabs — the scripts are written by Adam and Claude, grounded in his research and courses. We try to get it right, but check anything that matters. Here’s what we’re looking at.”`;
+const INTRO_MEGAN_ONLY = `MEGAN: Hey — I’m Megan, host of The Overhang — the podcast from Adam Rosenzweig. Adam’s out today. My voice is fully synthetic, built on ElevenLabs — the scripts are written by Adam and Claude, grounded in his research and courses. We try to get it right, but check anything that matters. Here’s what we’re looking at.`;
 
-const OUTRO_DIALOGUE = `MEGAN: “That’s The Overhang for today. We try to get it right, but check anything that matters. See you next time.”`;
+const OUTRO_DIALOGUE = `MEGAN: That’s The Overhang for today. We try to get it right, but check anything that matters. See you next time.`;
 
-const OUTRO_MEGAN_ONLY = `MEGAN: “That’s The Overhang for today. AI makes mistakes — check anything that matters. See you next time.”`;
+const OUTRO_MEGAN_ONLY = `MEGAN: That’s The Overhang for today. AI makes mistakes — check anything that matters. See you next time.`;
 
 // ─── DIALOGUE PARSER ─────────────────────────────────────────────────────────
 // Splits a dialogue script into { speaker, text } turns for text-to-dialogue API.
@@ -599,6 +599,7 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 - Do NOT include any host introduction or show intro — that is handled separately and will be prepended. Begin immediately with the episode content.
 - Do NOT include any outro or sign-off — that is handled separately and will be appended. End with your episode-specific closing thought or question only.
 - Do NOT start with "Welcome" or "Hello" — open in medias res with a brief orienting sentence about today's themes
+- For dialogue episodes, the body MUST begin with ADAM (not MEGAN) — Megan's intro is already prepended, so starting with MEGAN creates two consecutive Megan paragraphs
 
 **Tone and intellectual stance — this is critical:**
 - Be neither techno-optimist nor techno-pessimist. Do not editorialize in either direction.
