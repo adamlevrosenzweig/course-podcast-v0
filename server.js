@@ -664,6 +664,10 @@ Example format:
         episodeTitle = '';
       }
 
+      // Append date to title: "Title · Month DD, YYYY"
+      const dateLabel = new Date(today + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      if (episodeTitle) episodeTitle = `${episodeTitle} · ${dateLabel}`;
+
       // Normalize speaker labels — strip markdown bold and fix common variants
       script = script
         .replace(/\*\*(MEGAN|ADAM)\*\*\s*:/g, '$1:')   // **MEGAN**: → MEGAN:
