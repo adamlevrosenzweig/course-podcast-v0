@@ -630,12 +630,22 @@ Sources for today:
 ${sourcesForScript}
 ${narrativeContextBlock}${editLearningBlock}${feedbackSection}
 
+**Script format rules — strictly required for dialogue episodes:**
+- Every line of spoken content must begin with either "MEGAN:" or "ADAM:" — no exceptions
+- No unlabeled narrative paragraphs, no stage directions, no markdown formatting
+- Use plain text only — no **bold**, no *italics*, no headers
+- Speaker labels are plain uppercase with a colon: "MEGAN:" and "ADAM:" — not "**MEGAN**:" or "**Adam**:"
+- Example of correct format:
+  MEGAN: Here's the situation.
+  ADAM: Right, and what's striking is...
+  MEGAN: Exactly — so the question becomes...
+
 Return a JSON object with exactly two fields:
 - "title": a short, punchy 4–7 word title capturing today's central theme. Must be distinct from any recent episode titles — avoid reusing the same nouns, framings, or conceptual hooks.${recentTitlesBlock}
 - "script": the full podcast script text
 
 Example format:
-{"title": "When Convenience Becomes Surveillance", "script": "Adam, a quick one today..."}`;
+{"title": "When Convenience Becomes Surveillance", "script": "ADAM: Quick one today...\nMEGAN: Let's get into it."}`;
 
       const scriptResponse = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
@@ -653,6 +663,12 @@ Example format:
         script = rawResponse;
         episodeTitle = '';
       }
+
+      // Normalize speaker labels — strip markdown bold and fix common variants
+      script = script
+        .replace(/\*\*(MEGAN|ADAM)\*\*\s*:/g, '$1:')   // **MEGAN**: → MEGAN:
+        .replace(/\*\*(Megan|Adam)\*\*\s*:/g, (_, n) => n.toUpperCase() + ':') // **Megan**: → MEGAN:
+        .replace(/^(Megan|Adam)\s*:/gm, (_, n) => n.toUpperCase() + ':');      // Megan: → MEGAN:
 
       // Prepend fixed intro and append fixed outro
       const intro = episodeType === 'dialogue' ? INTRO_DIALOGUE : INTRO_MEGAN_ONLY;
