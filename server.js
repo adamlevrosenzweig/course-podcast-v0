@@ -1197,7 +1197,7 @@ app.get('/feed.xml', (req, res) => {
     const audioUrl = `${BASE_URL}/audio/${ep.audio_filename}`;
     const audioPath = path.join(AUDIO_DIR, ep.audio_filename);
     const audioSize = fs.existsSync(audioPath) ? fs.statSync(audioPath).size : 0;
-    const pubDate = new Date(ep.date).toUTCString();
+    const pubDate = new Date(ep.date + 'T12:00:00Z').toUTCString();
     // Prefer measured duration, then derive from file size (128kbps), then fall back to word-count estimate
     const duration = ep.audio_duration_seconds
       ? ep.audio_duration_seconds
