@@ -736,7 +736,7 @@ ${script.substring(0, 4000)}
 Write only the summary — no preamble, no headers, no markdown. Do not begin with "Summary:" or any label.`
             }]
           });
-          let epSummary = summaryResponse.content[0].text.trim().replace(/^summary[:\s\-—]*/i, '').trim();
+          let epSummary = summaryResponse.content[0].text.trim().replace(/^#+\s*summary[:\s\-—]*/i, '').replace(/^summary[:\s\-—]*/i, '').trim();
           db.prepare('UPDATE episodes SET episode_summary = ? WHERE id = ?').run(epSummary, episodeId);
           console.log(`[generate] Episode ${episodeNumber} narrative summary saved`);
           // Auto-generate show notes now that summary + sources are both saved
@@ -975,7 +975,7 @@ ${episode.script.substring(0, 4000)}
 Write only the summary — no preamble, no headers, no markdown. Do not begin with "Summary:" or any label.`
       }]
     });
-    const summary = response.content[0].text.trim().replace(/^summary[:\s\-—]*/i, '').trim();
+    const summary = response.content[0].text.trim().replace(/^#+\s*summary[:\s\-—]*/i, '').replace(/^summary[:\s\-—]*/i, '').trim();
     db.prepare('UPDATE episodes SET episode_summary = ? WHERE id = ?').run(summary, episode.id);
     console.log(`[summarize] Episode ${episode.number} summary saved`);
     res.json({ ok: true, episode_summary: summary });
@@ -1364,7 +1364,7 @@ ${ep.script.substring(0, 4000)}
 Write only the summary — no preamble, no headers, no markdown. Do not begin with "Summary:" or any label.`
         }]
       });
-      const summary = response.content[0].text.trim().replace(/^summary[:\s\-—]*/i, '').trim();
+      const summary = response.content[0].text.trim().replace(/^#+\s*summary[:\s\-—]*/i, '').replace(/^summary[:\s\-—]*/i, '').trim();
       db.prepare('UPDATE episodes SET episode_summary = ? WHERE id = ?').run(summary, ep.id);
       const show_notes = buildShowNotes(ep.id, summary);
       db.prepare('UPDATE episodes SET show_notes = ? WHERE id = ?').run(show_notes, ep.id);
