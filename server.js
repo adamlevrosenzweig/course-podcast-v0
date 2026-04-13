@@ -328,6 +328,7 @@ app.patch('/api/episodes/:id/status', (req, res) => {
     .run(status || null, publish_at || null, req.params.id);
 
   console.log(`[status] Episode ${episode.number} → ${status || episode.status}${publish_at ? ` (publish: ${publish_at})` : ''}`);
+  if (status === 'published') pingWebSub();
   res.json(db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id));
 });
 
@@ -985,6 +986,20 @@ Write only the summary — no preamble, no headers, no markdown. Do not begin wi
   }
 });
 
+// Helper: notify WebSub hub so Apple Podcasts re-fetches the feed promptly
+async function pingWebSub() {
+  const feedUrl = `${process.env.BASE_URL}/feed.xml`;
+  try {
+    await axios.post('https://pubsubhubbub.appspot.com/',
+      new URLSearchParams({ 'hub.mode': 'publish', 'hub.url': feedUrl }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 10000 }
+    );
+    console.log('[websub] Hub pinged successfully');
+  } catch (err) {
+    console.error('[websub] Ping failed (non-blocking):', err.message);
+  }
+}
+
 // Helper: assemble show notes HTML from episode_summary + sources
 function buildShowNotes(episodeId, episodeSummary) {
   const summaryHtml = episodeSummary
@@ -1215,8 +1230,11 @@ app.get('/feed.xml', (req, res) => {
 <rss version="2.0"
   xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
   xmlns:content="http://purl.org/rss/modules/content/"
-  xmlns:podcast="https://podcastindex.org/namespace/1.0">
+  xmlns:podcast="https://podcastindex.org/namespace/1.0"
+  xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
+    <atom:link rel="self" href="${BASE_URL}/feed.xml" type="application/rss+xml"/>
+    <atom:link rel="hub" href="https://pubsubhubbub.appspot.com/"/>
     <title>The Overhang</title>
     <description>The overhang is the space between what technology can do and what society can handle. Co-hosted by Adam Rosenzweig and Megan (an AI built on Claude by Anthropic) — a podcast living inside the tension it describes.</description>
     <link>${BASE_URL}</link>
