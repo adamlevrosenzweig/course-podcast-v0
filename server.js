@@ -932,6 +932,20 @@ app.get('/api/sources', (req, res) => {
   res.json(parsed);
 });
 
+// POST /api/episodes/:id/sources — add a manual source to an episode
+app.post('/api/episodes/:id/sources', requireAuth, (req, res) => {
+  const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+  if (!episode) return res.status(404).json({ error: 'Not found' });
+  const { title, url, summary, published_date } = req.body;
+  if (!url) return res.status(400).json({ error: 'url is required' });
+  const result = db.prepare(
+    'INSERT INTO sources (episode_id, title, url, summary, published_date, courses, contributed) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(episode.id, title || url, url, summary || null, published_date || null, '[]', 0);
+  db.prepare('UPDATE episodes SET source_count = source_count + 1 WHERE id = ?').run(episode.id);
+  const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(result.lastInsertRowid);
+  res.json(source);
+});
+
 // POST /api/episodes/:id/sources/discover
 // Runs web search based on episode script and saves discovered sources
 app.delete('/api/sources/:id', (req, res) => {
