@@ -739,7 +739,7 @@ function TodayPage({ onNavigate }) {
       {!generating && (
         <div style={{marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--border)'}}>
           <button className="btn btn-ghost btn-sm" onClick={generate}>
-            {latest ? 'Regenerate Today\'s Episode' : 'Generate Episode'}
+            Generate New Episode
           </button>
         </div>
       )}
@@ -1385,6 +1385,14 @@ function QueuePage() {
     });
   }, []);
 
+  async function deleteEpisode(ep) {
+    if (!confirm(`Delete draft "${ep.title || `Episode ${ep.number}`}"? This cannot be undone.`)) return;
+    try {
+      await apiFetch(`/api/episodes/${ep.id}`, { method: 'DELETE' });
+      await load();
+    } catch(e) { setError(e.message); }
+  }
+
   async function setStatus(ep, status) {
     setSaving(s => ({ ...s, [ep.id]: true }));
     try {
@@ -1481,6 +1489,15 @@ function QueuePage() {
                 {ep.audio_filename && <span style={{color:'var(--impact)',marginLeft:'8px'}}>● audio ready</span>}
               </div>
             </div>
+            {ep.status === 'draft' && (
+              <button
+                onClick={() => deleteEpisode(ep)}
+                title="Delete draft"
+                style={{background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer',fontSize:'16px',padding:'4px',lineHeight:1,opacity:0.6}}
+                onMouseOver={e => e.currentTarget.style.opacity=1}
+                onMouseOut={e => e.currentTarget.style.opacity=0.6}
+              >✕</button>
+            )}
           </div>
 
           {/* Script editor */}

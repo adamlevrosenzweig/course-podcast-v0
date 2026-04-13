@@ -376,6 +376,18 @@ Write only the summary, no preamble.`
   }
 });
 
+// ─── EPISODE DELETE ───────────────────────────────────────────────────────────
+
+app.delete('/api/episodes/:id', (req, res) => {
+  const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+  if (!episode) return res.status(404).json({ error: 'Not found' });
+  if (episode.status !== 'draft') return res.status(400).json({ error: 'Only draft episodes can be deleted' });
+  db.prepare('DELETE FROM sources WHERE episode_id = ?').run(episode.id);
+  db.prepare('DELETE FROM episodes WHERE id = ?').run(episode.id);
+  console.log(`[delete] Episode ${episode.number} deleted`);
+  res.json({ ok: true });
+});
+
 // ─── EPISODE IMPORT (pre-written script from Cowork interview workflow) ───────
 
 app.post('/api/episodes/import', (req, res) => {
@@ -648,7 +660,7 @@ Example format:
       // Step 3: Save to DB
       job.step = 'Saving episode...';
       const epResult = db.prepare(
-        'INSERT INTO episodes (number, date, title, script, original_script, duration_estimate, episode_type) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO episodes (number, date, title, script, original_script, duration_estimate, episode_type, status) VALUES (?, ?, ?, ?, ?, ?, ?, \'draft\')'
       ).run(episodeNumber, today, episodeTitle, script, script, durationEstimate, episodeType);
       const episodeId = epResult.lastInsertRowid;
 
