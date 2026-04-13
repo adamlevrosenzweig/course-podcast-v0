@@ -8,7 +8,7 @@ Searches the web for recent news relevant to two courses, writes a podcast scrip
 
 ## Tech stack
 
-- **Backend**: Node.js + Express, SQLite (node:sqlite built-in), node-cron
+- **Backend**: Node.js + Express, SQLite (node:sqlite built-in), node-cron, music-metadata (MP3 duration parsing)
 - **Frontend**: React (CDN, Babel standalone) — single file at `public/index.html`
 - **AI**: Anthropic SDK (claude-sonnet-4-20250514) with web_search tool for source discovery
 - **TTS**: ElevenLabs — dialogue uses `/v1/text-to-dialogue`, monologue uses `/v1/text-to-speech`
@@ -70,6 +70,8 @@ Public routes (no auth): `/feed.xml`, `/audio/*`, `/episodes/:id/transcript`, st
 - `POST /api/episodes/import` — import a pre-written script as a draft
 - `GET /episodes/:id/transcript` — public; returns published episode script as `text/html`
 - `POST /api/contributed` — add URL, pasted text, or file to source queue
+- `POST /api/admin/migrate/resync-summaries` — re-summarize all episodes + regenerate show notes
+- `POST /api/admin/migrate/resync-durations` — backfill accurate audio durations from MP3 metadata
 
 ## Studio console (Claude Code as primary interface)
 
@@ -118,12 +120,13 @@ Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by se
 ## RSS feed
 
 - **Show title:** The Overhang
-- **`<description>`**: uses `episode_summary` (Haiku-generated 2-3 sentence summary); falls back to title
+- **`<description>`**: uses `episode_summary` (Haiku-generated, max 3 sentences); falls back to title
 - **`<content:encoded>`**: episode summary + HTML source list (real HTTP/HTTPS URLs only)
 - **Cover art:** `podcast_cover_megan4.jpg` — `?v=4` for cache busting; bump `?v=N` in all three RSS occurrences to force Apple to re-fetch
 - **Explicit:** `true` on channel and each item
 - **Transcripts:** `<podcast:transcript>` pointing to `/episodes/:id/transcript` with `type="text/html"`
-- **Namespace:** `xmlns:podcast="https://podcastindex.org/namespace/1.0"`
+- **Namespaces:** `xmlns:podcast`, `xmlns:atom`
+- **WebSub:** `atom:link rel="hub"` points to `pubsubhubbub.appspot.com`; `pingWebSub()` fires automatically when an episode is published, triggering Apple Podcasts to re-fetch within minutes
 
 ## Audio generation
 
@@ -132,6 +135,7 @@ Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by se
 - New audio POST cancels any running job for that episode
 - Episode re-read from DB right before calling ElevenLabs (uses latest saved script)
 - Audio served with `Cache-Control: no-cache`; Queue player appends `?v=timestamp` on completion
+- `audio_duration_seconds` parsed from actual MP3 frame metadata via `music-metadata` (accurate); RSS falls back to `audioSize / 16000` then `duration_estimate * 60`
 
 ## Fallback cron
 
@@ -145,4 +149,4 @@ Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by se
 
 1. **Script edit tracking** — `original_script` stores AI draft. Edits summarized by Haiku into `edit_summary`. Last 5 injected into next script prompt.
 2. **Listener feedback** — `feedback` table feeds into source discovery and script prompts
-3. **Narrative memory** — `episode_summary` (Haiku, 2-3 sentences on central arguments). Last 5 injected for continuity. Also used as RSS `<description>`.
+3. **Narrative memory** — `episode_summary` (Haiku, max 3 sentences on central arguments, no label prefix). Last 5 injected for continuity. Also used as RSS `<description>`.
