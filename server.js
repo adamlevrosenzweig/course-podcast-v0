@@ -880,8 +880,10 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
       job.step = 'Saving audio file...';
       const audioBuffer = Buffer.from(audioData);
       fs.writeFileSync(audioPath, audioBuffer);
-      const { format } = await mm.parseBuffer(audioBuffer, { mimeType: 'audio/mpeg' });
-      const audioDurationSeconds = Math.round(format.duration || audioBuffer.length / 16000);
+      // Use file size / 16000 (128 kbps = 16000 bytes/sec) — more reliable than
+      // music-metadata for concatenated ElevenLabs MP3s whose Xing header only
+      // describes the first chunk, causing metadata parsers to undercount duration.
+      const audioDurationSeconds = Math.round(audioBuffer.length / 16000);
       db.prepare('UPDATE episodes SET audio_filename = ?, audio_duration_seconds = ?, audio_updated_at = datetime(\'now\') WHERE id = ?')
         .run(audioFilename, audioDurationSeconds, freshEpisode.id);
 
@@ -1379,8 +1381,8 @@ app.post('/api/admin/migrate/resync-durations', requireAuth, async (req, res) =>
     const audioPath = path.join(AUDIO_DIR, ep.audio_filename);
     if (!fs.existsSync(audioPath)) { results.skipped++; continue; }
     try {
-      const { format } = await mm.parseFile(audioPath, { duration: true });
-      const seconds = Math.round(format.duration || 0);
+      const audioSize = fs.statSync(audioPath).size;
+      const seconds = Math.round(audioSize / 16000);
       if (seconds > 0) {
         db.prepare('UPDATE episodes SET audio_duration_seconds = ? WHERE id = ?').run(seconds, ep.id);
         results.updated++;
