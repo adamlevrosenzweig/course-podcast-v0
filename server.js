@@ -207,7 +207,11 @@ function isShowActive() {
 }
 
 app.get('/api/settings', (req, res) => {
-  res.json({ show_active: isShowActive() });
+  const lastPub = db.prepare("SELECT MAX(date) as d FROM episodes WHERE status = 'published'").get();
+  const daysSince = lastPub?.d
+    ? Math.floor((Date.now() - new Date(lastPub.d)) / (1000 * 60 * 60 * 24))
+    : null;
+  res.json({ show_active: isShowActive(), last_published: lastPub?.d || null, days_since_published: daysSince });
 });
 
 app.post('/api/settings/active', (req, res) => {
@@ -441,6 +445,7 @@ app.post('/api/episodes/generate', async (req, res) => {
   if (running) return res.json({ status: 'running', message: 'Generation already in progress' });
 
   const episodeType = req.body.episode_type || 'megan_only';
+  const topic = req.body.topic || null;
 
   const jobId = Date.now().toString();
   generationJobs[jobId] = { jobId, status: 'running', step: 'Starting...', startedAt: Date.now(), episodeType };
@@ -505,7 +510,7 @@ Source quality requirements — strictly apply these:
 - AVOID: product announcements or marketing copy disguised as news
 - AVOID: low-domain-authority blogs or sites you've never heard of
 - If a story is only covered by low-quality sources, skip it — wait for a credible outlet to cover it
-${themeList}${contributedSection}${feedbackSection}
+${themeList}${contributedSection}${feedbackSection}${topic ? `\n\n**Focus area for today:** ${topic}\nPrioritize sources directly relevant to this specific topic. Still apply normal source quality requirements.` : ''}
 
 For each source found, provide a JSON object with:
 - title: article/story title
@@ -582,7 +587,7 @@ Return ONLY a valid JSON array of source objects. No other text.`;
 
 Both courses share territory: how technology affects vulnerable populations, how business models shape social outcomes, and where ethics and commercial incentives collide.
 
-Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today}) using the following sources. The script should:
+Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today}) using the following sources.${topic ? ` Today's episode should center on: **${topic}**. Let this be the organizing thread — weave other sources around it, but keep this the focus.` : ''} The script should:
 - Be 10–50 minutes when read aloud
 - Sound like a well-produced, intelligent daily briefing — natural spoken voice, not a list of summaries
 - Don't be afraid to be academic in your language — Adam values precision and abhors platitudes

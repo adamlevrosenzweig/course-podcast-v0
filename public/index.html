@@ -502,6 +502,9 @@ function TodayPage({ onNavigate }) {
   const [feedbackSource, setFeedbackSource] = useState('');
   const [feedback, setFeedback] = useState([]);
   const [discoveringSources, setDiscoveringSources] = useState(false);
+  const [episodeType, setEpisodeType] = useState('dialogue');
+  const [publishDate, setPublishDate] = useState('');
+  const [publishSaving, setPublishSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -524,7 +527,7 @@ function TodayPage({ onNavigate }) {
     setError('');
     setStatus('Starting generation…');
     try {
-      await apiFetch('/api/episodes/generate', { method: 'POST', body: {} });
+      await apiFetch('/api/episodes/generate', { method: 'POST', body: { episode_type: episodeType } });
       // Poll every 3s until done
       let done = false;
       while (!done) {
@@ -579,6 +582,18 @@ function TodayPage({ onNavigate }) {
     setGeneratingAudio(false);
   }
 
+  async function setEpStatus(ep, status) {
+    setPublishSaving(true);
+    try {
+      await apiFetch(`/api/episodes/${ep.id}/status`, {
+        method: 'PATCH',
+        body: { status, publish_at: status === 'scheduled' ? publishDate : null }
+      });
+      await load();
+    } catch(e) { setError(e.message); }
+    setPublishSaving(false);
+  }
+
   async function discoverSources() {
     if (!latest) return;
     setDiscoveringSources(true);
@@ -620,6 +635,14 @@ function TodayPage({ onNavigate }) {
           <div className="generate-hero-sub">
             Generate today's episode to search the web for relevant stories across<br />
             Intimate Technology and Social Impact Strategy.
+          </div>
+          <div style={{display:'flex',gap:'8px',justifyContent:'center',marginBottom:'16px'}}>
+            {['dialogue','megan_only'].map(t => (
+              <button key={t} className={`btn btn-sm${episodeType === t ? ' btn-primary' : ' btn-ghost'}`}
+                onClick={() => setEpisodeType(t)}>
+                {t === 'dialogue' ? 'Dialogue' : 'Megan Only'}
+              </button>
+            ))}
           </div>
           <button className="btn btn-primary" onClick={generate}>
             Generate Today's Episode
@@ -673,6 +696,32 @@ function TodayPage({ onNavigate }) {
               >
                 {generatingAudio ? <><div className="spinner"></div> Generating Audio…</> : '▶ Generate Audio'}
               </button>
+            )}
+
+            {latest.status === 'draft' && (
+              <div style={{marginTop:'16px',paddingTop:'16px',borderTop:'1px solid var(--border)',display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
+                <span style={{fontSize:'12px',color:'var(--text-muted)'}}>Draft —</span>
+                <button className="btn btn-primary btn-sm" onClick={() => setEpStatus(latest, 'published')} disabled={publishSaving}>
+                  {publishSaving ? 'Publishing…' : 'Publish now'}
+                </button>
+                <input type="date" value={publishDate} onChange={e => setPublishDate(e.target.value)}
+                  style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'4px',padding:'4px 8px',color:'var(--text)',fontSize:'12px'}} />
+                <button className="btn btn-sm" onClick={() => setEpStatus(latest, 'scheduled')} disabled={!publishDate || publishSaving}>
+                  Schedule
+                </button>
+              </div>
+            )}
+            {latest.status === 'scheduled' && (
+              <div style={{marginTop:'16px',paddingTop:'16px',borderTop:'1px solid var(--border)',display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
+                <span style={{fontSize:'12px',color:'var(--text-muted)'}}>Scheduled for {latest.publish_at}</span>
+                <button className="btn btn-sm" onClick={() => setEpStatus(latest, 'draft')} disabled={publishSaving}>Unschedule</button>
+                <button className="btn btn-primary btn-sm" onClick={() => setEpStatus(latest, 'published')} disabled={publishSaving}>Publish now</button>
+              </div>
+            )}
+            {latest.status === 'published' && (
+              <div style={{marginTop:'16px',paddingTop:'16px',borderTop:'1px solid var(--border)'}}>
+                <span style={{fontSize:'12px',color:'var(--impact)',fontWeight:500}}>● Published</span>
+              </div>
             )}
 
             <div style={{marginTop: '14px'}}>
@@ -737,7 +786,13 @@ function TodayPage({ onNavigate }) {
       {error && <div className="status-line error">Error: {error}</div>}
 
       {!generating && (
-        <div style={{marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--border)'}}>
+        <div style={{marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--border)', display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap'}}>
+          {['dialogue','megan_only'].map(t => (
+            <button key={t} className={`btn btn-sm${episodeType === t ? ' btn-primary' : ' btn-ghost'}`}
+              onClick={() => setEpisodeType(t)}>
+              {t === 'dialogue' ? 'Dialogue' : 'Megan Only'}
+            </button>
+          ))}
           <button className="btn btn-ghost btn-sm" onClick={generate}>
             Generate New Episode
           </button>
@@ -1239,19 +1294,35 @@ function ThemesPage() {
 function SettingsPage() {
   const [voices, setVoices] = useState([]);
   const [config, setConfig] = useState(null);
+  const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [voiceSearch, setVoiceSearch] = useState('megan');
+  const [togglingActive, setTogglingActive] = useState(false);
+
+  const loadSettings = async () => {
+    const s = await apiFetch('/api/settings').catch(() => null);
+    setSettings(s);
+  };
 
   useEffect(() => {
     Promise.all([
-      Promise.resolve(null),
+      loadSettings(),
       apiFetch('/api/voices').catch(() => [])
-    ]).then(([cfg, vcs]) => {
-      setConfig(cfg);
+    ]).then(([_, vcs]) => {
       setVoices(vcs);
       setLoading(false);
     });
   }, []);
+
+  async function toggleActive() {
+    if (!settings) return;
+    setTogglingActive(true);
+    try {
+      await apiFetch('/api/settings/active', { method: 'POST', body: { active: !settings.show_active } });
+      await loadSettings();
+    } catch(e) {}
+    setTogglingActive(false);
+  }
 
   const filteredVoices = voices.filter(v =>
     v.name.toLowerCase().includes(voiceSearch.toLowerCase())
@@ -1263,6 +1334,36 @@ function SettingsPage() {
     <div>
       <h1 className="page-title">Settings</h1>
       <p className="page-subtitle">Configuration and API status</p>
+
+      {settings && (
+        <div className="card">
+          <div className="card-title" style={{fontSize:'15px',marginBottom:'16px'}}>Show Control</div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
+            <div>
+              <div style={{fontSize:'13px',color:'var(--text)',fontWeight:500}}>
+                {settings.show_active ? '● Show is active' : '○ Show is paused'}
+              </div>
+              <div style={{fontSize:'12px',color:'var(--text-muted)',marginTop:'4px'}}>
+                {settings.show_active
+                  ? 'Fallback cron will auto-generate if no episode publishes for 3+ days.'
+                  : 'Paused — no auto-generation will run.'}
+              </div>
+            </div>
+            <button className="btn btn-sm" onClick={toggleActive} disabled={togglingActive}>
+              {togglingActive ? '…' : settings.show_active ? 'Pause show' : 'Resume show'}
+            </button>
+          </div>
+          <div style={{fontSize:'12px',color:'var(--text-muted)',paddingTop:'12px',borderTop:'1px solid var(--border)'}}>
+            <span style={{fontWeight:500}}>Fallback cron:</span> 9:00 AM Pacific, Sun–Fri · fires if no episode published in 3 days
+            {settings.last_published && (
+              <span style={{marginLeft:'16px',color: settings.days_since_published >= 3 ? '#e0b050' : 'var(--text-muted)'}}>
+                Last published: {settings.last_published} ({settings.days_since_published}d ago
+                {settings.days_since_published >= 3 ? ' — fallback may fire soon' : ''})
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="card-title" style={{fontSize:'15px',marginBottom:'16px'}}>API Status</div>
@@ -1359,6 +1460,12 @@ function QueuePage() {
   const [saving, setSaving] = useState({});
   const [audioStatus, setAudioStatus] = useState({});
   const [audioTimestamps, setAudioTimestamps] = useState({});
+  const [showDiff, setShowDiff] = useState({});
+  const [importScript, setImportScript] = useState('');
+  const [importTitle, setImportTitle] = useState('');
+  const [importType, setImportType] = useState('dialogue');
+  const [importing, setImporting] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const load = async () => {
     try {
@@ -1391,6 +1498,20 @@ function QueuePage() {
       await apiFetch(`/api/episodes/${ep.id}`, { method: 'DELETE' });
       await load();
     } catch(e) { setError(e.message); }
+  }
+
+  async function importEpisode() {
+    if (!importScript.trim()) return;
+    setImporting(true);
+    try {
+      await apiFetch('/api/episodes/import', {
+        method: 'POST',
+        body: { script: importScript, title: importTitle || undefined, episode_type: importType }
+      });
+      setImportScript(''); setImportTitle(''); setShowImport(false);
+      await load();
+    } catch(e) { setError(e.message); }
+    setImporting(false);
   }
 
   async function setStatus(ep, status) {
@@ -1466,11 +1587,49 @@ function QueuePage() {
 
       {error && <div className="error-msg" style={{marginBottom:'24px'}}>{error}<button onClick={()=>setError('')} style={{marginLeft:'12px',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer'}}>✕</button></div>}
 
+      {/* Import form */}
+      <div style={{marginBottom:'24px'}}>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowImport(s => !s)}>
+          {showImport ? '✕ Cancel import' : '↑ Import a script'}
+        </button>
+        {showImport && (
+          <div style={{marginTop:'16px',background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'8px',padding:'20px'}}>
+            <div style={{fontSize:'13px',color:'var(--text-muted)',marginBottom:'16px'}}>Paste a script to create a new draft. Intros and outros are prepended/appended automatically.</div>
+            <input
+              value={importTitle}
+              onChange={e => setImportTitle(e.target.value)}
+              placeholder="Episode title (optional)"
+              style={{width:'100%',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'4px',padding:'8px 12px',color:'var(--text)',fontSize:'13px',marginBottom:'8px'}}
+            />
+            <div style={{display:'flex',gap:'8px',marginBottom:'8px'}}>
+              {['dialogue','megan_only'].map(t => (
+                <button key={t} className={`btn btn-sm${importType === t ? ' btn-primary' : ' btn-ghost'}`}
+                  onClick={() => setImportType(t)}>
+                  {t === 'dialogue' ? 'Dialogue' : 'Megan Only'}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={importScript}
+              onChange={e => setImportScript(e.target.value)}
+              placeholder="Paste script here…"
+              rows={12}
+              style={{width:'100%',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'4px',padding:'12px',color:'var(--text)',fontSize:'13px',fontFamily:'monospace',lineHeight:'1.6',resize:'vertical'}}
+            />
+            <div style={{display:'flex',gap:'8px',marginTop:'8px',alignItems:'center'}}>
+              <button className="btn btn-primary" onClick={importEpisode} disabled={importing || !importScript.trim()}>
+                {importing ? 'Importing…' : 'Import as Draft'}
+              </button>
+              {importScript.trim() && <span style={{fontSize:'11px',color:'var(--text-muted)'}}>{importScript.trim().split(/\s+/).length} words · ~{Math.round(importScript.trim().split(/\s+/).length/150)} min</span>}
+            </div>
+          </div>
+        )}
+      </div>
+
       {episodes.length === 0 && (
         <div style={{color:'var(--text-muted)',marginTop:'48px',textAlign:'center'}}>
           <div style={{fontSize:'28px',marginBottom:'12px'}}>◎</div>
           <div>No episodes in the queue.</div>
-          <div style={{fontSize:'13px',marginTop:'6px'}}>Import a script via the API or Cowork interview workflow.</div>
         </div>
       )}
 
@@ -1509,6 +1668,38 @@ function QueuePage() {
                 placeholder="Episode title"
                 style={{width:'100%',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'4px',padding:'8px 12px',color:'var(--text)',fontSize:'13px',marginBottom:'8px'}}
               />
+              {/* Stats bar */}
+              <div style={{display:'flex',gap:'16px',fontSize:'11px',color:'var(--text-muted)',marginBottom:'6px',alignItems:'center'}}>
+                <span>{editScript.trim().split(/\s+/).filter(Boolean).length} words</span>
+                <span>~{Math.round(editScript.trim().split(/\s+/).filter(Boolean).length / 150)} min</span>
+                {ep.original_script && ep.original_script !== editScript && (
+                  <button
+                    className="btn btn-sm"
+                    style={{fontSize:'11px',padding:'2px 8px',marginLeft:'auto'}}
+                    onClick={() => setShowDiff(s => ({ ...s, [ep.id]: !s[ep.id] }))}
+                  >
+                    {showDiff[ep.id] ? 'Hide diff' : 'Show diff vs. original'}
+                  </button>
+                )}
+              </div>
+              {/* Diff view */}
+              {showDiff[ep.id] && ep.original_script && (
+                <div style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'4px',padding:'12px',marginBottom:'8px',fontSize:'12px',fontFamily:'monospace',lineHeight:'1.7',maxHeight:'300px',overflowY:'auto'}}>
+                  {(() => {
+                    const orig = ep.original_script.split('\n');
+                    const curr = editScript.split('\n');
+                    const maxLen = Math.max(orig.length, curr.length);
+                    return Array.from({length: maxLen}, (_, i) => {
+                      const o = orig[i]; const c = curr[i];
+                      if (o === c) return <div key={i} style={{color:'var(--text-muted)'}}>{o || '\u00a0'}</div>;
+                      return <React.Fragment key={i}>
+                        {o !== undefined && <div style={{color:'#e07070',textDecoration:'line-through',opacity:0.7}}>{o}</div>}
+                        {c !== undefined && <div style={{color:'var(--impact)'}}>{c}</div>}
+                      </React.Fragment>;
+                    });
+                  })()}
+                </div>
+              )}
               <textarea
                 value={editScript}
                 onChange={e => setEditScript(e.target.value)}
@@ -1522,12 +1713,24 @@ function QueuePage() {
                 <button className="btn" onClick={() => saveAndRegen(ep)} disabled={saving[ep.id]}>
                   {saving[ep.id] ? 'Saving…' : '↻ Save & regenerate audio'}
                 </button>
-                <button className="btn" onClick={() => setEditingId(null)}>Cancel</button>
+                <button className="btn" onClick={() => { setEditingId(null); setShowDiff(s => ({ ...s, [ep.id]: false })); }}>Cancel</button>
               </div>
             </div>
           ) : (
             <div style={{background:'var(--surface2)',borderRadius:'4px',padding:'12px',marginBottom:'16px',fontSize:'12px',color:'var(--text-muted)',fontFamily:'monospace',lineHeight:'1.7',maxHeight:'120px',overflow:'hidden',position:'relative'}}>
-              {(ep.script || '').substring(0, 400)}…
+              {(ep.script || '').substring(0, 400).split('\n').map((line, i) => {
+                const isMegan = line.startsWith('MEGAN:');
+                const isAdam = line.startsWith('ADAM:');
+                if (isMegan || isAdam) {
+                  const speaker = isMegan ? 'MEGAN' : 'ADAM';
+                  const rest = line.slice(speaker.length + 1);
+                  return <div key={i}>
+                    <span style={{fontWeight:700,color: isMegan ? 'var(--impact)' : 'var(--accent)',marginRight:'4px'}}>{speaker}:</span>
+                    {rest}
+                  </div>;
+                }
+                return <div key={i}>{line || '\u00a0'}</div>;
+              })}…
               <div style={{position:'absolute',bottom:0,left:0,right:0,height:'32px',background:'linear-gradient(transparent, var(--surface2))'}} />
             </div>
           )}
