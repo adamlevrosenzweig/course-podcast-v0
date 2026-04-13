@@ -141,7 +141,8 @@ Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by se
 
 ## Fallback cron
 
-- Runs daily at 9:00 AM Pacific, Sun–Fri
+- Scheduled-episode publish cron: daily at 5:00 AM Pacific — publishes any episode with `status=scheduled` and `publish_at <= today`
+- Fallback cron: daily at 9:00 AM Pacific, Sun–Fri
 - Fires if no episode published in the last 3 days (drafts don't count)
 - Generates a Megan-only episode, waits for audio, then auto-publishes
 - Respects kill switch — skips if show is inactive
