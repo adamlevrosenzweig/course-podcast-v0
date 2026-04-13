@@ -367,7 +367,7 @@ ${episode.original_script.substring(0, 3000)}
 EDITED (host's version):
 ${script.substring(0, 3000)}
 
-Write only the summary, no preamble.`
+Write only the summary — no preamble, no headers, no markdown.`
           }]
         });
         const summary = response.content[0].text.trim();
@@ -732,7 +732,7 @@ Example format:
 SCRIPT:
 ${script.substring(0, 4000)}
 
-Write only the summary, no preamble.`
+Write only the summary — no preamble, no headers, no markdown.`
             }]
           });
           const epSummary = summaryResponse.content[0].text.trim();
@@ -953,7 +953,7 @@ app.post('/api/episodes/:id/summarize', async (req, res) => {
 SCRIPT:
 ${episode.script.substring(0, 4000)}
 
-Write only the summary, no preamble.`
+Write only the summary — no preamble, no headers, no markdown.`
       }]
     });
     const summary = response.content[0].text.trim();
