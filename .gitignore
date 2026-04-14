@@ -1,23 +1,6 @@
-{
-  "name": "podcast-briefing",
-  "version": "1.0.0",
-  "description": "Daily podcast briefing for Intimate Technology and Social Impact Strategy courses",
-  "main": "server.js",
-  "scripts": {
-    "start": "node --no-warnings server.js",
-    "dev": "nodemon --no-warnings server.js"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.30.0",
-    "axios": "^1.7.0",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.0"
-  },
-  "engines": {
-    "node": ">=22.5.0"
-  }
-}
+node_modules/
+.env
+*.db
+data/
+audio/
+*.log
