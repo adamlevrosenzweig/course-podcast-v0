@@ -1224,7 +1224,7 @@ app.get('/feed.xml', (req, res) => {
     return `
     <item>
       <title>${escXml(ep.title || `Episode ${ep.number}`)}</title>
-      <description>${description}</description>
+      <description>${showNotes}</description>
       <content:encoded>${showNotes}</content:encoded>
       <pubDate>${pubDate}</pubDate>
       <enclosure url="${audioUrl}" length="${audioSize}" type="audio/mpeg"/>
