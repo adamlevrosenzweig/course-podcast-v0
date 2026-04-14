@@ -1373,6 +1373,44 @@ function ThemesPage() {
 
 // ── SETTINGS PAGE ────────────────────────────────────────────────────────────
 
+function ApplePodcastsRefreshCard() {
+  const [state, setState] = useState('idle'); // idle | running | done | error
+  const [message, setMessage] = useState('');
+
+  async function handleRefresh() {
+    setState('running');
+    setMessage('');
+    try {
+      await apiFetch('/api/admin/migrate/resync-durations', { method: 'POST' });
+      const result = await apiFetch('/api/admin/ping-websub', { method: 'POST' });
+      setState('done');
+      setMessage(result.message || 'Done — Apple Podcasts should update within minutes.');
+    } catch(e) {
+      setState('error');
+      setMessage(e.message || 'Something went wrong.');
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="card-title" style={{fontSize:'15px',marginBottom:'8px'}}>Apple Podcasts</div>
+      <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'16px'}}>
+        Recalculates episode durations from file size and pings the WebSub hub to force Apple to re-fetch the feed. Use this after metadata corrections or if Apple is showing stale dates or durations.
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+        <button className="btn btn-sm" onClick={handleRefresh} disabled={state === 'running'}>
+          {state === 'running' ? 'Refreshing…' : 'Force Apple refresh'}
+        </button>
+        {message && (
+          <span style={{fontSize:'12px', color: state === 'error' ? 'var(--red)' : 'var(--impact)'}}>
+            {message}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SettingsPage() {
   const [voices, setVoices] = useState([]);
   const [config, setConfig] = useState(null);
@@ -1446,6 +1484,8 @@ function SettingsPage() {
           </div>
         </div>
       )}
+
+      <ApplePodcastsRefreshCard />
 
       <div className="card">
         <div className="card-title" style={{fontSize:'15px',marginBottom:'16px'}}>API Status</div>
