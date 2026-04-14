@@ -64,9 +64,11 @@ Wait 1 week, then search Apple Podcasts and Spotify for "Course Briefing Adam Ro
 
 ---
 
-## Episode Workflow (Coming Soon)
+## Working on This Project via Claude.ai Chat
 
-The full Cowork-based episode workflow — topic briefing, Adam interview, script review, and push — will be documented here once implemented.
+To manage the podcast from Claude.ai chat (or share access with a coworker), create a Claude.ai Project and paste the contents of [`claude-project-instructions.md`](./claude-project-instructions.md) into the Project Instructions field.
+
+That file gives Claude the same context as `CLAUDE.md` — project overview, API base URL, auth pattern, common task recipes, and script conventions — so any chat session in that project can make live API calls to Railway without needing the CLI.
 
 ---
 
