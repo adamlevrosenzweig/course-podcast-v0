@@ -860,10 +860,11 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
           {
             text: freshEpisode.script,
             model_id: 'eleven_turbo_v2_5',
+            output_format: 'mp3_44100_128',
             voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3, use_speaker_boost: true }
           },
           {
-            headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
+            headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
             responseType: 'arraybuffer',
             timeout: 300000
           }
@@ -1199,7 +1200,10 @@ app.get('/feed.xml', (req, res) => {
     const audioUrl = `${BASE_URL}/audio/${ep.audio_filename}`;
     const audioPath = path.join(AUDIO_DIR, ep.audio_filename);
     const audioSize = fs.existsSync(audioPath) ? fs.statSync(audioPath).size : 0;
-    const pubDate = new Date(ep.date + 'T12:00:00Z').toUTCString();
+    // Use publish_at for scheduled episodes — it reflects the actual air date.
+    // Fall back to date (UTC generation date) for immediately-published episodes.
+    const episodeDate = ep.publish_at || ep.date;
+    const pubDate = new Date(episodeDate + 'T12:00:00Z').toUTCString();
     // Prefer measured duration, then derive from file size (128kbps), then fall back to word-count estimate
     const duration = ep.audio_duration_seconds
       ? ep.audio_duration_seconds
@@ -1290,6 +1294,7 @@ cron.schedule('0 5 * * *', async () => {
     db.prepare("UPDATE episodes SET status = 'published' WHERE id = ?").run(ep.id);
     console.log(`[auto-publish] Episode ${ep.number} published (was scheduled for ${ep.publish_at})`);
   }
+  pingWebSub();
 }, { timezone: 'America/Los_Angeles' });
 
 console.log('[auto-publish] 5 AM publish cron scheduled (Pacific time)');
@@ -1393,7 +1398,20 @@ app.post('/api/admin/migrate/resync-durations', requireAuth, async (req, res) =>
       results.errors.push({ episode_id: ep.id, error: err.message });
     }
   }
+  // Ping WebSub so Apple Podcasts re-fetches the feed with updated durations
+  pingWebSub();
   res.json(results);
+});
+
+// Manual WebSub ping — use this to force Apple Podcasts to re-fetch the feed
+// without needing to re-publish an episode (e.g. after resync-durations or metadata edits).
+app.post('/api/admin/ping-websub', requireAuth, async (req, res) => {
+  try {
+    await pingWebSub();
+    res.json({ ok: true, message: 'WebSub hub notified — Apple Podcasts should re-fetch the feed within minutes.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // One-time migration: re-summarize all episodes + regenerate show notes
