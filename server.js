@@ -1256,7 +1256,11 @@ app.get('/feed.xml', (req, res) => {
     <link>${BASE_URL}</link>
     <language>en-us</language>
     <itunes:author>Adam Rosenzweig</itunes:author>
-    <itunes:email>adam.lev.rosenzweig@gmail.com</itunes:email>
+    <itunes:email>theoverhangpodcast@gmail.com</itunes:email>
+    <itunes:owner>
+      <itunes:name>Adam Rosenzweig</itunes:name>
+      <itunes:email>theoverhangpodcast@gmail.com</itunes:email>
+    </itunes:owner>
     <itunes:category text="Education"/>
     <itunes:image href="${BASE_URL}/podcast_cover_megan4.jpg?v=4"/>
     <image><url>${BASE_URL}/podcast_cover_megan4.jpg?v=4</url><title>The Overhang</title><link>${BASE_URL}</link></image>
