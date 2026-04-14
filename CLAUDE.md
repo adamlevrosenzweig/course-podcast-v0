@@ -120,8 +120,9 @@ Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by se
 ## RSS feed
 
 - **Show title:** The Overhang
-- **`<description>`**: uses `episode_summary` (Haiku-generated, max 3 sentences); falls back to title
-- **`<content:encoded>`**: episode summary + HTML source list (real HTTP/HTTPS URLs only)
+- **`<description>`**: CDATA-wrapped HTML show notes (summary paragraph + Sources list) — Apple Podcasts reads this, not `<content:encoded>`
+- **`<content:encoded>`**: identical to `<description>` — kept for non-Apple podcast apps that prefer it
+- **Apple Podcasts caveat:** Apple ignores `<content:encoded>` for show notes; always put HTML in `<description>` or sources won't appear in Apple Podcasts
 - **Cover art:** `podcast_cover_megan4.jpg` — `?v=4` for cache busting; bump `?v=N` in all three RSS occurrences to force Apple to re-fetch
 - **Explicit:** `true` on channel and each item
 - **Transcripts:** `<podcast:transcript>` pointing to `/episodes/:id/transcript` with `type="text/html"`
