@@ -30,6 +30,8 @@ try { db.exec('ALTER TABLE episodes ADD COLUMN audio_duration_seconds INTEGER');
 try { db.exec('ALTER TABLE episodes ADD COLUMN show_notes TEXT'); } catch (_) {}
 // Timestamp of last audio generation — used as persistent cache-buster in the audio player
 try { db.exec('ALTER TABLE episodes ADD COLUMN audio_updated_at TEXT'); } catch (_) {}
+// Devil's advocate analysis — steelman review of episode arguments
+try { db.exec('ALTER TABLE episodes ADD COLUMN steelman_notes TEXT'); } catch (_) {}
 // All existing episodes are already live — mark them published
 try { db.exec("UPDATE episodes SET status = 'published' WHERE status IS NULL OR status = ''"); } catch (_) {}
 db.exec(`PRAGMA foreign_keys = ON`);

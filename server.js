@@ -750,6 +750,53 @@ Write only the summary — no preamble, no headers, no markdown. Do not begin wi
         }
       })();
 
+      // Fire-and-forget: devil's advocate / steelman analysis of episode arguments
+      (async () => {
+        try {
+          const steelmanClient = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+          const steelmanResponse = await steelmanClient.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 1500,
+            messages: [{
+              role: 'user',
+              content: `You are a rigorous, intellectually honest critic reviewing a podcast episode script for *The Overhang*, a briefing for UC Berkeley Haas courses on technology and social impact. Your job is to play devil's advocate — not to refute the episode's arguments, but to surface the strongest counterarguments so the script can be made more persuasive and honest.
+
+The goal is to augment and strengthen the arguments, not tear them down. Write as a smart skeptic who wants the episode to succeed.
+
+SCRIPT:
+${script.substring(0, 6000)}
+
+Respond in this exact format — plain text, no markdown headers with #, use the section labels as shown:
+
+THESIS
+[One sentence stating the episode's central argument or framing]
+
+CLAIM 1: [Short label]
+Counterargument: [Strongest opposing view a well-informed skeptic would raise — 2–3 sentences]
+To strengthen: [Specific addition or edit that would preempt or address this — reference moments in the script where possible]
+
+CLAIM 2: [Short label]
+Counterargument: [...]
+To strengthen: [...]
+
+CLAIM 3: [Short label]
+Counterargument: [...]
+To strengthen: [...]
+
+BIGGEST VULNERABILITY
+[1–2 sentences on the single highest-leverage fix that would most improve the episode's rigor or credibility]
+
+Cover the 3 most substantive claims only. Be direct and specific. Do not pad.`
+            }]
+          });
+          const steelmanNotes = steelmanResponse.content[0].text.trim();
+          db.prepare('UPDATE episodes SET steelman_notes = ? WHERE id = ?').run(steelmanNotes, episodeId);
+          console.log(`[generate] Episode ${episodeNumber} steelman notes saved`);
+        } catch (err) {
+          console.error('[generate] Steelman generation failed:', err.message);
+        }
+      })();
+
       // Compile all scripts into Adam's Context running log
       try {
         const { compileScripts } = require('./compile-scripts');
@@ -1016,6 +1063,58 @@ function buildShowNotes(episodeId, episodeSummary) {
     : '';
   return summaryHtml + (sourcesHtml ? '<br>' + sourcesHtml : '');
 }
+
+// POST /api/episodes/:id/steelman — generate devil's advocate analysis and save
+app.post('/api/episodes/:id/steelman', requireAuth, async (req, res) => {
+  const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+  if (!episode) return res.status(404).json({ error: 'Not found' });
+  if (!episode.script) return res.status(400).json({ error: 'Episode has no script' });
+  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
+
+  try {
+    const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1500,
+      messages: [{
+        role: 'user',
+        content: `You are a rigorous, intellectually honest critic reviewing a podcast episode script for *The Overhang*, a briefing for UC Berkeley Haas courses on technology and social impact. Your job is to play devil's advocate — not to refute the episode's arguments, but to surface the strongest counterarguments so the script can be made more persuasive and honest.
+
+The goal is to augment and strengthen the arguments, not tear them down. Write as a smart skeptic who wants the episode to succeed.
+
+SCRIPT:
+${episode.script.substring(0, 6000)}
+
+Respond in this exact format — plain text, no markdown headers with #, use the section labels as shown:
+
+THESIS
+[One sentence stating the episode's central argument or framing]
+
+CLAIM 1: [Short label]
+Counterargument: [Strongest opposing view a well-informed skeptic would raise — 2–3 sentences]
+To strengthen: [Specific addition or edit that would preempt or address this — reference moments in the script where possible]
+
+CLAIM 2: [Short label]
+Counterargument: [...]
+To strengthen: [...]
+
+CLAIM 3: [Short label]
+Counterargument: [...]
+To strengthen: [...]
+
+BIGGEST VULNERABILITY
+[1–2 sentences on the single highest-leverage fix that would most improve the episode's rigor or credibility]
+
+Cover the 3 most substantive claims only. Be direct and specific. Do not pad.`
+      }]
+    });
+    const steelman_notes = response.content[0].text.trim();
+    db.prepare('UPDATE episodes SET steelman_notes = ? WHERE id = ?').run(steelman_notes, episode.id);
+    res.json({ ok: true, steelman_notes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // POST /api/episodes/:id/show-notes/generate — assemble and save show notes
 app.post('/api/episodes/:id/show-notes/generate', requireAuth, (req, res) => {

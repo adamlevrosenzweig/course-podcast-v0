@@ -508,6 +508,8 @@ function TodayPage({ onNavigate }) {
   const [showNotesOpen, setShowNotesOpen] = useState(false);
   const [editShowNotes, setEditShowNotes] = useState('');
   const [showNotesSaving, setShowNotesSaving] = useState(null);
+  const [steelmanOpen, setSteelmanOpen] = useState(false);
+  const [steelmanGenerating, setSteelmanGenerating] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -627,6 +629,16 @@ function TodayPage({ onNavigate }) {
       setLatest(prev => ({ ...prev, show_notes: editShowNotes }));
     } catch(e) { setError(e.message); }
     setShowNotesSaving(null);
+  }
+
+  async function generateSteelman() {
+    if (!latest) return;
+    setSteelmanGenerating(true);
+    try {
+      const res = await apiFetch(`/api/episodes/${latest.id}/steelman`, { method: 'POST', body: {} });
+      setLatest(prev => ({ ...prev, steelman_notes: res.steelman_notes }));
+    } catch(e) { setError(e.message); }
+    setSteelmanGenerating(false);
   }
 
   async function submitFeedback(e) {
@@ -811,6 +823,40 @@ function TodayPage({ onNavigate }) {
                       style={{fontSize:'13px',lineHeight:'1.6',color:'var(--text)'}}
                       dangerouslySetInnerHTML={{__html: editShowNotes}}
                     />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Devil's Advocate */}
+          <div style={{marginTop:'16px',borderTop:'1px solid var(--border)',paddingTop:'12px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom: steelmanOpen ? '10px' : 0}}>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setSteelmanOpen(v => !v)}
+              >
+                {steelmanOpen ? '▾ Devil\'s advocate' : '▸ Devil\'s advocate'}
+                {!latest.steelman_notes && <span style={{color:'var(--text-muted)',marginLeft:'6px',fontWeight:400}}>(not yet generated)</span>}
+              </button>
+              {steelmanOpen && (
+                <button className="btn btn-sm" onClick={generateSteelman} disabled={steelmanGenerating}>
+                  {steelmanGenerating ? '⟳ Generating…' : '↻ Regenerate'}
+                </button>
+              )}
+            </div>
+            {steelmanOpen && (
+              <div>
+                {latest.steelman_notes ? (
+                  <pre style={{whiteSpace:'pre-wrap',fontFamily:'inherit',fontSize:'13px',lineHeight:'1.65',color:'var(--text)',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'4px',padding:'12px 14px',margin:0}}>
+                    {latest.steelman_notes}
+                  </pre>
+                ) : (
+                  <div style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 0'}}>
+                    <span style={{color:'var(--text-muted)',fontSize:'13px'}}>No analysis yet.</span>
+                    <button className="btn btn-sm" onClick={generateSteelman} disabled={steelmanGenerating}>
+                      {steelmanGenerating ? '⟳ Generating…' : '⊕ Generate'}
+                    </button>
                   </div>
                 )}
               </div>

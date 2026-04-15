@@ -63,6 +63,7 @@ Public routes (no auth): `/feed.xml`, `/audio/*`, `/episodes/:id/transcript`, st
 - `PATCH /api/episodes/:id/status` — update status, publish_at
 - `PATCH /api/episodes/:id/script` — update script and/or title
 - `POST /api/episodes/:id/summarize` — run Haiku summarization, save episode_summary
+- `POST /api/episodes/:id/steelman` — generate devil's advocate analysis, save steelman_notes
 - `POST /api/episodes/:id/sources/discover` — retroactively find sources for an episode
 - `DELETE /api/sources/:id` — remove an individual source from an episode
 - `GET /api/settings` — returns show_active, last_published, days_since_published
@@ -154,3 +155,13 @@ Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by se
 1. **Script edit tracking** — `original_script` stores AI draft. Edits summarized by Haiku into `edit_summary`. Last 5 injected into next script prompt.
 2. **Listener feedback** — `feedback` table feeds into source discovery and script prompts
 3. **Narrative memory** — `episode_summary` (Haiku, max 3 sentences on central arguments, no label prefix). Last 5 injected for continuity. Also used as RSS `<description>`.
+
+## Devil's advocate / steelman
+
+Every generated episode automatically gets a steelman analysis (Sonnet, fire-and-forget, same timing as episode summary). Stored in `steelman_notes` column. Visible in Queue UI under "Devil's advocate" collapsible panel.
+
+- Surfaces the 3 strongest counterarguments to the episode's key claims
+- For each, suggests a specific edit or addition to preempt or acknowledge the objection
+- Closes with a "biggest vulnerability" — the highest-leverage fix
+- On-demand regeneration: `POST /api/episodes/:id/steelman`
+- Also available as a standalone CLI skill: `/steelman [script or file path]`
