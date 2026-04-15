@@ -8,6 +8,12 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.min.mjs" type="module"></script>
+  <script type="module">
+    import * as pdfjsLib from 'https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.min.mjs';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs';
+    window.pdfjsLib = pdfjsLib;
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
@@ -1185,13 +1191,25 @@ function ContributePage() {
     const file = e.target.files[0];
     if (!file) return;
     setFileName(file.name);
-    const text = await new Promise((res, rej) => {
-      const reader = new FileReader();
-      reader.onload = ev => res(ev.target.result);
-      reader.onerror = rej;
-      reader.readAsText(file);
-    });
-    setFileContent(text);
+    if (file.name.toLowerCase().endsWith('.pdf')) {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let text = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map(item => item.str).join(' ') + '\n';
+      }
+      setFileContent(text.trim());
+    } else {
+      const text = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = ev => res(ev.target.result);
+        reader.onerror = rej;
+        reader.readAsText(file);
+      });
+      setFileContent(text);
+    }
   }
 
   async function submit(e) {
@@ -1240,7 +1258,7 @@ function ContributePage() {
   return (
     <div>
       <h1 className="page-title">Contribute a Source</h1>
-      <p className="page-subtitle">Add a URL, paste article text, or upload a file to the next episode's source pool</p>
+      <p className="page-subtitle">Add a URL, paste article text, or upload a file (including PDFs) to the next episode's source pool</p>
 
       <div className="card">
         <div style={{display:'flex',borderBottom:'1px solid var(--border)',marginBottom:'20px'}}>
@@ -1275,8 +1293,8 @@ function ContributePage() {
           </>)}
           {mode === 'file' && (<>
             <div className="form-group">
-              <label>File (.txt, .md, or any plain text)</label>
-              <input type="file" accept=".txt,.md,.text,.csv" onChange={handleFile} style={{color:'var(--text)',fontSize:'13px'}} />
+              <label>File (.pdf, .txt, .md, or any plain text)</label>
+              <input type="file" accept=".pdf,.txt,.md,.text,.csv" onChange={handleFile} style={{color:'var(--text)',fontSize:'13px'}} />
               {fileName && <div style={{marginTop:'6px',fontSize:'12px',color:'var(--text-muted)'}}>{fileName} · {fileContent.length.toLocaleString()} chars loaded</div>}
             </div>
             <div className="form-group">
