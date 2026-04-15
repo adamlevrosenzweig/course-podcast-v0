@@ -1182,6 +1182,7 @@ function ContributePage() {
   const [fileContent, setFileContent] = useState('');
   const [note, setNote] = useState('');
   const [pending, setPending] = useState([]);
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
@@ -1230,7 +1231,7 @@ function ContributePage() {
     }
     try {
       await apiFetch('/api/contributed', { method: 'POST', body: { url: submitUrl || undefined, note: submitNote } });
-      setUrl(''); setPasteTitle(''); setPasteContent(''); setFileName(''); setFileContent(''); setNote('');
+      setUrl(''); setPasteTitle(''); setPasteContent(''); setFileName(''); setFileContent(''); setNote(''); setFileInputKey(k => k + 1);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
       const updated = await apiFetch('/api/contributed');
@@ -1294,7 +1295,7 @@ function ContributePage() {
           {mode === 'file' && (<>
             <div className="form-group">
               <label>File (.pdf, .txt, .md, or any plain text)</label>
-              <input type="file" accept=".pdf,.txt,.md,.text,.csv" onChange={handleFile} style={{color:'var(--text)',fontSize:'13px'}} />
+              <input key={fileInputKey} type="file" accept=".pdf,.txt,.md,.text,.csv" onChange={handleFile} style={{color:'var(--text)',fontSize:'13px'}} />
               {fileName && <div style={{marginTop:'6px',fontSize:'12px',color:'var(--text-muted)'}}>{fileName} · {fileContent.length.toLocaleString()} chars loaded</div>}
             </div>
             <div className="form-group">
