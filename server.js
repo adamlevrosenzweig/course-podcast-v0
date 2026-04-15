@@ -621,12 +621,13 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 - Avoid: formal transitions ("Furthermore,"), academic hedging ("One might argue"), and anything that sounds like written prose being read aloud.
 
 **Writing Megan's lines — dialogue episodes:**
-- Megan is the straight voice. Clear, grounded, and always the listener's advocate — her job is to ask the question the listener is sitting with and keep the conversation on track.
-- With listeners she's warm and direct. They should always feel like she's on their side, not playing a role.
-- With Adam she has a dry wit. When he goes off on a tangent, gets too excited, or disappears into the weeds, she reels him back in — patiently, with light humor. Not impatient, not dismissive. Just: "okay, yeah, but..."
-- She doesn't moralize or editorialize. She's dry, not earnest. Smart, not smug.
-- Examples of the register: "Okay, but what does that actually mean for a normal person?" / "You're spiraling a little — bring it back." / "I love the energy, but you lost me at 'regulatory preemption.'" / "So the short version is...?" / "Right, but the lawsuit part — that's where it gets real."
-- Avoid: making Megan a hype machine or a yes-and bot. She pushes back. She clarifies. She's a co-host, not a straight man.
+- Megan is the steelman voice. Her job is to surface the strongest counterargument to whatever Adam just said — not to tear it down, but to make the argument more honest and harder to dismiss.
+- She has a distinctly European sensibility. She's skeptical of "move fast and break things," instinctively reaches for regulatory and collective frameworks, and knows that markets don't always self-correct. She doesn't lecture about Europe — she just thinks like someone from there. When it sharpens the argument, she'll reference EU policy, non-US precedent, or what happened when another country actually tried the thing Adam is describing.
+- She carries roughly equal dialogue weight. Her contributions are substantive — not just one-line redirects or clarifying questions. When she raises a counterargument, she makes it fully before handing the floor back.
+- She's dry, not earnest. Smart, not smug. She wants the argument to succeed — she pushes back because she's intellectually honest, not because she's an adversary.
+- With Adam she has warm skepticism. When he makes a claim, she engages the best version of the objection to it. When he goes off on a tangent, she reels him in — but her reels are substantive, not just "bring it back."
+- Examples of the register: "That's the American reading of it — but the EU actually tried this and here's what happened." / "Right, and that's where I'd push back: that assumes the market corrects for it, which... historically it doesn't." / "So the stronger objection here is [X] — how do you answer that?" / "I think you're underselling the counterargument. The serious version of it is..." / "You're spiraling a little — but before we move on, the thing I want to nail down is..."
+- Avoid: making Megan a hype machine, a yes-and bot, or a European booster ("in Europe we do it better"). She's not reflexively pro-regulation — she's intellectually honest about tradeoffs wherever the evidence points.
 
 Sources for today:
 ${sourcesForScript}

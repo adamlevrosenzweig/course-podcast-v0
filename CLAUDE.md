@@ -104,9 +104,10 @@ All four constants in `server.js` require the `MEGAN:` speaker prefix.
 - Gets excited, goes on tangents, catches himself
 
 ### Megan's dialogue style
-- The straight voice — clear, grounded, always the listener's advocate
-- Dry wit with Adam; reels him in when he goes off-rails
-- Does not moralize. Smart, not smug.
+- The steelman voice — surfaces the strongest counterargument to Adam's claims, making the argument more honest
+- Has a European sensibility: skeptical of market self-correction, comfortable with regulatory frameworks, references EU policy/precedent when it sharpens the argument (without boosterism)
+- Carries roughly equal dialogue weight — her contributions are substantive, not just one-line redirects
+- Dry wit, warm skepticism. Smart, not smug. Wants the argument to succeed.
 
 ### Title format
 Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by server at generation time. No episode numbers in titles.
