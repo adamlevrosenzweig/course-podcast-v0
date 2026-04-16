@@ -325,6 +325,11 @@ app.patch('/api/episodes/:id/status', (req, res) => {
   const valid = ['draft', 'scheduled', 'published'];
   if (status && !valid.includes(status)) return res.status(400).json({ error: `status must be one of: ${valid.join(', ')}` });
 
+  // Scheduling requires a publish_at date — without it the 5 AM cron will never fire
+  if (status === 'scheduled' && !publish_at && !episode.publish_at) {
+    return res.status(400).json({ error: 'publish_at is required when scheduling an episode' });
+  }
+
   db.prepare('UPDATE episodes SET status = COALESCE(?, status), publish_at = ? WHERE id = ?')
     .run(status || null, publish_at || null, req.params.id);
 

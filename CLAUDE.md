@@ -81,7 +81,7 @@ Adam manages the podcast primarily through conversation with Claude Code, which 
 **Typical Claude Code workflows:**
 - "Generate an episode about X" → `POST /api/episodes/generate` with topic + episode_type
 - Edit script via conversation → `PATCH /api/episodes/:id/script`
-- "Schedule for Thursday" → `PATCH /api/episodes/:id/status`
+- "Schedule for Thursday" → `PATCH /api/episodes/:id/status` with **both** `status: "scheduled"` and `publish_at: "YYYY-MM-DD"` — the 5 AM publish cron queries `publish_at <= today`, so omitting `publish_at` silently prevents auto-publish
 - "What's in the queue?" → `GET /api/episodes`, filter drafts
 
 ## Script authoring conventions
