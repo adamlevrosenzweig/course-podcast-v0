@@ -138,7 +138,7 @@ Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by se
 - New audio POST cancels any running job for that episode
 - Episode re-read from DB right before calling ElevenLabs (uses latest saved script)
 - Audio served with `Cache-Control: no-cache`; Queue player appends `?v=timestamp` on completion
-- `audio_duration_seconds` parsed from actual MP3 frame metadata via `music-metadata` (accurate); RSS falls back to `audioSize / 16000` then `duration_estimate * 60`
+- `audio_duration_seconds` calculated as `audioBuffer.length / 16000` (CBR 128 kbps = 16000 bytes/sec) at audio generation time; RSS falls back to same calculation from file size, then `duration_estimate * 60`
 - `<itunes:duration>` formatted as `M:SS` or `H:MM:SS` via `toHMS()` helper in the feed route
 - Queue UI shows `M:SS` from `audio_duration_seconds` when available; shows nothing for drafts without audio (`duration_estimate` no longer displayed)
 

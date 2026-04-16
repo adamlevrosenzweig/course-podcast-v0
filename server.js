@@ -21,6 +21,18 @@ const ELEVENLABS_ADAM_VOICE_ID = process.env.ELEVENLABS_ADAM_VOICE_ID || ''; // 
 const AUDIO_DIR = process.env.AUDIO_DIR || path.join(__dirname, 'audio');
 if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
+// Strip ID3v2 header from an MP3 buffer. ElevenLabs embeds a TLEN tag in each chunk
+// describing only that chunk's duration; Apple Podcasts trusts TLEN for its in-player
+// timer. Removing all headers lets players derive duration from file size (CBR 128 kbps).
+function stripId3v2(buf) {
+  if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) { // 'ID3'
+    const size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) |
+                 ((buf[8] & 0x7f) << 7)  |  (buf[9] & 0x7f);
+    return buf.slice(10 + size);
+  }
+  return buf;
+}
+
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
@@ -895,17 +907,11 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
           );
           buffers.push(Buffer.from(response.data));
         }
-        // Strip ID3v2 headers from all chunks after the first — otherwise the
-        // browser reads only the first chunk's duration from its ID3v2 header.
-        function stripId3v2(buf) {
-          if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) { // 'ID3'
-            const size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) |
-                         ((buf[8] & 0x7f) << 7)  |  (buf[9] & 0x7f);
-            return buf.slice(10 + size);
-          }
-          return buf;
-        }
-        audioData = Buffer.concat([buffers[0], ...buffers.slice(1).map(stripId3v2)]);
+        // Strip ID3v2 headers from all chunks — ElevenLabs embeds a TLEN tag in each
+        // chunk's header describing only that chunk's duration. Apple Podcasts trusts TLEN
+        // for its in-player timer, causing it to show only the first chunk's length.
+        // Stripping all headers lets players derive duration from file size (CBR 128 kbps).
+        audioData = Buffer.concat(buffers.map(stripId3v2));
       } else {
         // ── Single-voice monologue: use text-to-speech endpoint ──────────────
         const response = await axios.post(
@@ -1508,6 +1514,30 @@ app.post('/api/admin/migrate/resync-durations', requireAuth, async (req, res) =>
     }
   }
   // Ping WebSub so Apple Podcasts re-fetches the feed with updated durations
+  pingWebSub();
+  res.json(results);
+});
+
+// One-time migration: strip ID3v2 headers from existing MP3 files so Apple Podcasts
+// reads the correct in-player timer (was showing only the first chunk's TLEN duration).
+app.post('/api/admin/migrate/restrip-audio', requireAuth, async (req, res) => {
+  const episodes = db.prepare('SELECT id, audio_filename FROM episodes WHERE audio_filename IS NOT NULL').all();
+  const results = { updated: 0, skipped: 0, errors: [] };
+  for (const ep of episodes) {
+    const audioPath = path.join(AUDIO_DIR, ep.audio_filename);
+    if (!fs.existsSync(audioPath)) { results.skipped++; continue; }
+    try {
+      const original = fs.readFileSync(audioPath);
+      const stripped = stripId3v2(original);
+      if (stripped.length === original.length) { results.skipped++; continue; }
+      fs.writeFileSync(audioPath, stripped);
+      const seconds = Math.round(stripped.length / 16000);
+      db.prepare('UPDATE episodes SET audio_duration_seconds = ? WHERE id = ?').run(seconds, ep.id);
+      results.updated++;
+    } catch (err) {
+      results.errors.push({ episode_id: ep.id, error: err.message });
+    }
+  }
   pingWebSub();
   res.json(results);
 });
