@@ -407,20 +407,21 @@ app.delete('/api/episodes/:id', (req, res) => {
   if (!episode) return res.status(404).json({ error: 'Not found' });
   if (episode.status !== 'draft') return res.status(400).json({ error: 'Only draft episodes can be deleted' });
   try {
-    db.transaction(() => {
-      // Delete feedback referencing this episode's sources first
-      const sourceIds = db.prepare('SELECT id FROM sources WHERE episode_id = ?').all(episode.id).map(r => r.id);
-      if (sourceIds.length > 0) {
-        db.prepare(`DELETE FROM feedback WHERE source_id IN (${sourceIds.map(() => '?').join(',')})`).run(...sourceIds);
-      }
-      db.prepare('DELETE FROM feedback WHERE episode_id = ?').run(episode.id);
-      db.prepare('UPDATE contributed_urls SET episode_id = NULL WHERE episode_id = ?').run(episode.id);
-      db.prepare('DELETE FROM sources WHERE episode_id = ?').run(episode.id);
-      db.prepare('DELETE FROM episodes WHERE id = ?').run(episode.id);
-    })();
+    db.prepare('BEGIN').run();
+    // Delete feedback referencing this episode's sources first
+    const sourceIds = db.prepare('SELECT id FROM sources WHERE episode_id = ?').all(episode.id).map(r => r.id);
+    if (sourceIds.length > 0) {
+      db.prepare(`DELETE FROM feedback WHERE source_id IN (${sourceIds.map(() => '?').join(',')})`).run(...sourceIds);
+    }
+    db.prepare('DELETE FROM feedback WHERE episode_id = ?').run(episode.id);
+    db.prepare('UPDATE contributed_urls SET episode_id = NULL WHERE episode_id = ?').run(episode.id);
+    db.prepare('DELETE FROM sources WHERE episode_id = ?').run(episode.id);
+    db.prepare('DELETE FROM episodes WHERE id = ?').run(episode.id);
+    db.prepare('COMMIT').run();
     console.log(`[delete] Episode ${episode.number} deleted`);
     res.json({ ok: true });
   } catch (err) {
+    try { db.prepare('ROLLBACK').run(); } catch (_) {}
     console.error(`[delete] Failed to delete episode ${episode.id}:`, err.message);
     res.status(500).json({ error: err.message });
   }
