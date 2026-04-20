@@ -406,6 +406,8 @@ app.delete('/api/episodes/:id', (req, res) => {
   const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
   if (!episode) return res.status(404).json({ error: 'Not found' });
   if (episode.status !== 'draft') return res.status(400).json({ error: 'Only draft episodes can be deleted' });
+  db.prepare('DELETE FROM feedback WHERE episode_id = ?').run(episode.id);
+  db.prepare('UPDATE contributed_urls SET episode_id = NULL WHERE episode_id = ?').run(episode.id);
   db.prepare('DELETE FROM sources WHERE episode_id = ?').run(episode.id);
   db.prepare('DELETE FROM episodes WHERE id = ?').run(episode.id);
   console.log(`[delete] Episode ${episode.number} deleted`);
