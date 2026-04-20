@@ -599,6 +599,8 @@ Return ONLY a valid JSON array of source objects. No other text.`;
         ? `\n\n**What Adam has changed in past AI-generated scripts (apply these lessons):**\n${editSummaries.map(e => `- Episode ${e.number}: ${e.edit_summary}`).join('\n')}`
         : '';
 
+      const isDialogue = episodeType === 'dialogue';
+
       const scriptPrompt = `You are the host of a daily podcast briefing for a UC Berkeley Haas professor named Adam. Adam teaches two courses:
 
 1. **Intimate Technology** — how technology mediates human intimacy, vulnerability, and connection
@@ -618,7 +620,7 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 - Do NOT include any host introduction or show intro — that is handled separately and will be prepended. Begin immediately with the episode content.
 - Do NOT include any outro or sign-off — that is handled separately and will be appended. End with your episode-specific closing thought or question only.
 - Do NOT start with "Welcome" or "Hello" — open in medias res with a brief orienting sentence about today's themes
-- For dialogue episodes, the body MUST begin with ADAM (not MEGAN) — Megan's intro is already prepended, so starting with MEGAN creates two consecutive Megan paragraphs
+${isDialogue ? '- The body MUST begin with ADAM (not MEGAN) — Megan\'s intro is already prepended, so starting with MEGAN creates two consecutive Megan paragraphs' : '- This is a solo Megan episode — do NOT write any ADAM: lines. Megan is the sole voice throughout.'}
 
 **Tone and intellectual stance — this is critical:**
 - Be neither techno-optimist nor techno-pessimist. Do not editorialize in either direction.
@@ -628,7 +630,7 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 - Do not moralize. Present tensions and tradeoffs clearly and let the listener draw their own conclusions.
 - The goal is rigorous, intellectually honest analysis — the kind a thoughtful academic would be proud to assign.
 
-**Writing Adam's lines — dialogue episodes:**
+${isDialogue ? `**Writing Adam's lines:**
 - Adam is a professor but he talks like a person. His lines should sound like office hours, not a lecture.
 - Use contractions always. Use sentence fragments when natural. Let him interrupt himself or revise mid-thought.
 - He swears casually when it fits — "shit," "fucking," "damn" — not for shock value, just because that's how he talks.
@@ -637,20 +639,26 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 - Examples of the register: "Yeah, and that's the part that actually concerns me." / "I mean, shit — if that's the tradeoff they're making..." / "Look, I think they're wrong about this, and here's why." / "Okay wait, I'm getting into the weeds — the point is..."
 - Avoid: formal transitions ("Furthermore,"), academic hedging ("One might argue"), and anything that sounds like written prose being read aloud.
 
-**Writing Megan's lines — dialogue episodes:**
+**Writing Megan's lines:**
 - Megan is the steelman voice. Her job is to surface the strongest counterargument to whatever Adam just said — not to tear it down, but to make the argument more honest and harder to dismiss.
 - She has a distinctly European sensibility. She's skeptical of "move fast and break things," instinctively reaches for regulatory and collective frameworks, and knows that markets don't always self-correct. She doesn't lecture about Europe — she just thinks like someone from there. When it sharpens the argument, she'll reference EU policy, non-US precedent, or what happened when another country actually tried the thing Adam is describing.
 - She carries roughly equal dialogue weight. Her contributions are substantive — not just one-line redirects or clarifying questions. When she raises a counterargument, she makes it fully before handing the floor back.
 - She's dry, not earnest. Smart, not smug. She wants the argument to succeed — she pushes back because she's intellectually honest, not because she's an adversary.
 - With Adam she has warm skepticism. When he makes a claim, she engages the best version of the objection to it. When he goes off on a tangent, she reels him in — but her reels are substantive, not just "bring it back."
 - Examples of the register: "That's the American reading of it — but the EU actually tried this and here's what happened." / "Right, and that's where I'd push back: that assumes the market corrects for it, which... historically it doesn't." / "So the stronger objection here is [X] — how do you answer that?" / "I think you're underselling the counterargument. The serious version of it is..." / "You're spiraling a little — but before we move on, the thing I want to nail down is..."
-- Avoid: making Megan a hype machine, a yes-and bot, or a European booster ("in Europe we do it better"). She's not reflexively pro-regulation — she's intellectually honest about tradeoffs wherever the evidence points.
+- Avoid: making Megan a hype machine, a yes-and bot, or a European booster ("in Europe we do it better"). She's not reflexively pro-regulation — she's intellectually honest about tradeoffs wherever the evidence points.` : `**Writing Megan's solo voice:**
+- Megan is the sole host for this episode. Adam is not present.
+- She has a distinctly European sensibility — skeptical of market self-correction, comfortable with regulatory frameworks, references EU policy/precedent when it sharpens the argument (without boosterism).
+- She presents both the strong case for and the strongest objection to each argument herself — she doesn't just advocate for one position.
+- She's dry, not earnest. Smart, not smug. Intellectually honest about tradeoffs wherever the evidence points.
+- The register is conversational and precise — natural spoken voice, not written prose being read aloud. Use contractions and natural sentence rhythms.
+- Do NOT write any ADAM: lines. This is a monologue.`}
 
 Sources for today:
 ${sourcesForScript}
 ${narrativeContextBlock}${editLearningBlock}${feedbackSection}
 
-**Script format rules — strictly required for dialogue episodes:**
+${isDialogue ? `**Script format rules — strictly required:**
 - Every line of spoken content must begin with either "MEGAN:" or "ADAM:" — no exceptions
 - No unlabeled narrative paragraphs, no stage directions, no markdown formatting
 - Use plain text only — no **bold**, no *italics*, no headers
@@ -658,7 +666,13 @@ ${narrativeContextBlock}${editLearningBlock}${feedbackSection}
 - Example of correct format:
   MEGAN: Here's the situation.
   ADAM: Right, and what's striking is...
-  MEGAN: Exactly — so the question becomes...
+  MEGAN: Exactly — so the question becomes...` : `**Script format rules — strictly required:**
+- This is a monologue. Do NOT use any speaker labels like "MEGAN:" or "ADAM:" — write plain prose paragraphs only.
+- No stage directions, no markdown formatting
+- Use plain text only — no **bold**, no *italics*, no headers
+- Example of correct format:
+  Here's what's happening with AI and hiring right now.
+  The case for it seems reasonable on its face — but that's exactly where I'd push back.`}
 
 Return a JSON object with exactly three fields:
 - "title": a short, punchy 4–7 word title capturing today's central theme. Must be distinct from any recent episode titles — avoid reusing the same nouns, framings, or conceptual hooks.${recentTitlesBlock}
@@ -666,7 +680,10 @@ Return a JSON object with exactly three fields:
 - "used_source_indices": a JSON array of 0-based indices (into the sources list above) that you actually referenced or drew from in the script. Only include sources that materially informed the episode content. This controls what appears in show notes.
 
 Example format:
-{"title": "When Convenience Becomes Surveillance", "script": "ADAM: Quick one today...\nMEGAN: Let's get into it.", "used_source_indices": [0, 2, 4, 5]}`;
+${isDialogue
+  ? '{"title": "When Convenience Becomes Surveillance", "script": "ADAM: Quick one today...\\nMEGAN: Let\'s get into it.", "used_source_indices": [0, 2, 4, 5]}'
+  : '{"title": "When Convenience Becomes Surveillance", "script": "Here\'s what\'s happening today.\\nThe case for it seems reasonable — but that\'s where I\'d push back.", "used_source_indices": [0, 2, 4, 5]}'
+}`;
 
       const scriptResponse = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
