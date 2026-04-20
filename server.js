@@ -676,7 +676,16 @@ ${isDialogue ? `**Script format rules — strictly required:**
   The case for it seems reasonable on its face — but that's exactly where I'd push back.`}
 
 Return a JSON object with exactly three fields:
-- "title": a short, punchy 4–7 word title capturing today's central theme. Must be distinct from any recent episode titles — avoid reusing the same nouns, framings, or conceptual hooks.${recentTitlesBlock}
+- "title": a 4–8 word title that makes a curious non-expert want to listen. Write for someone scrolling a podcast feed, not reading an academic journal. The title should feel like something you'd text a friend: "listen to this one."
+  Rules:
+  - Use plain, concrete language. Name the thing — the company, the technology, the stakes — not the abstract concept.
+  - A question or tension works well: "Who Owns Your Face?", "When the Safety Net Has an Algorithm"
+  - A punchy declarative also works: "The Lie Inside Your Fitness App", "Meta's Loneliness Business"
+  - Okay to be slightly provocative or irreverent if it's earned by the content
+  - Do NOT use gerund pairs or abstract noun stacks: NOT "Programming Care, Amplifying Extraction" or "Optimizing Vulnerability, Monetizing Connection"
+  - Do NOT use academic hedging words: NOT "Toward," "Beyond," "Navigating," "Rethinking," "Interrogating"
+  - Do NOT use em-dash compounds that read like paper subtitles: NOT "Surveillance Capitalism: A New Lens"
+  - Must be distinct from recent episodes — avoid reusing the same nouns, framings, or conceptual hooks.${recentTitlesBlock}
 - "script": the full podcast script text
 - "used_source_indices": a JSON array of 0-based indices (into the sources list above) that you actually referenced or drew from in the script. Only include sources that materially informed the episode content. This controls what appears in show notes.
 
