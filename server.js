@@ -138,7 +138,7 @@ app.post('/logout', (req, res) => {
 
 const INTRO_DIALOGUE = `MEGAN: Hey — I’m Megan, co-host of The Overhang with Adam Rosenzweig. Quick note on what you’re hearing: both of our voices are AI-generated — Adam’s is cloned from his real voice using ElevenLabs, mine is fully synthetic. Scripts are written by Adam and Claude, grounded in his research and courses. We try to get it right, but check anything that matters. Here’s what we’re looking at.`;
 
-const INTRO_MEGAN_ONLY = `MEGAN: Hey — I’m Megan, host of The Overhang — the podcast from Adam Rosenzweig. Adam’s out today. My voice is fully synthetic, built on ElevenLabs — the scripts are written by Adam and Claude, grounded in his research and courses. We try to get it right, but check anything that matters. Here’s what we’re looking at.`;
+const INTRO_MEGAN_ONLY = `MEGAN: Hey — I’m Megan, co-host of The Overhang with Adam Rosenzweig. Adam’s out today. My voice is fully synthetic, built on ElevenLabs — the scripts are written by Adam and Claude, grounded in his research and courses. We try to get it right, but check anything that matters. Here’s what we’re looking at.`;
 
 const OUTRO_DIALOGUE = `MEGAN: That’s The Overhang for today. We try to get it right, but check anything that matters. See you next time.`;
 
