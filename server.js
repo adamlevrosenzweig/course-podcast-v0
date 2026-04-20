@@ -572,9 +572,21 @@ Return ONLY a valid JSON array of source objects. No other text.`;
 
       // Step 2: Write script
       job.step = `Writing script from ${discoveredSources.length} sources...`;
-      const sourcesForScript = discoveredSources.map((s, i) =>
-        `[${i + 1}] ${s.title}\nURL: ${s.url}\nSummary: ${s.summary}\nCourses: ${(s.courses || []).join(', ')}`
-      ).join('\n\n');
+
+      // Flag sources already cited in a published episode
+      const prevSourceRows = db.prepare(`
+        SELECT s.url, e.number
+        FROM sources s
+        JOIN episodes e ON s.episode_id = e.id
+        WHERE s.url IS NOT NULL AND e.status = 'published'
+      `).all();
+      const prevSourceMap = new Map(prevSourceRows.map(r => [r.url, r.number]));
+
+      const sourcesForScript = discoveredSources.map((s, i) => {
+        const prevEp = s.url ? prevSourceMap.get(s.url) : null;
+        const prevNote = prevEp != null ? `\n[PREVIOUSLY CITED in Episode ${prevEp} — do not re-introduce as new]` : '';
+        return `[${i + 1}] ${s.title}\nURL: ${s.url}\nSummary: ${s.summary}\nCourses: ${(s.courses || []).join(', ')}${prevNote}`;
+      }).join('\n\n');
 
       // Fetch recent titles to avoid repetition
       const recentTitles = db.prepare(
@@ -589,7 +601,7 @@ Return ONLY a valid JSON array of source objects. No other text.`;
         `SELECT number, title, episode_summary FROM episodes WHERE episode_summary IS NOT NULL ORDER BY number DESC LIMIT 5`
       ).all();
       const narrativeContextBlock = recentEpisodeSummaries.length
-        ? `\n\n**Recent episodes (for narrative continuity — build on threads, don't repeat arguments):**\n${recentEpisodeSummaries.reverse().map(e => `- Episode ${e.number} (${e.title}): ${e.episode_summary}`).join('\n')}`
+        ? `\n\n**Recent episodes (for narrative continuity):**\nDo NOT re-introduce specific statistics, studies, or stories that appear in these summaries as if they are new. You may reference them briefly in passing ("as we've covered"), but they must not anchor or lead the episode. Build forward from what's been established.\n${recentEpisodeSummaries.reverse().map(e => `- Episode ${e.number} (${e.title}): ${e.episode_summary}`).join('\n')}`
         : '';
 
       // Fetch edit summaries from past episodes — Adam's edits are signal about his preferences
