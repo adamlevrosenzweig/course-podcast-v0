@@ -406,12 +406,24 @@ app.delete('/api/episodes/:id', (req, res) => {
   const episode = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
   if (!episode) return res.status(404).json({ error: 'Not found' });
   if (episode.status !== 'draft') return res.status(400).json({ error: 'Only draft episodes can be deleted' });
-  db.prepare('DELETE FROM feedback WHERE episode_id = ?').run(episode.id);
-  db.prepare('UPDATE contributed_urls SET episode_id = NULL WHERE episode_id = ?').run(episode.id);
-  db.prepare('DELETE FROM sources WHERE episode_id = ?').run(episode.id);
-  db.prepare('DELETE FROM episodes WHERE id = ?').run(episode.id);
-  console.log(`[delete] Episode ${episode.number} deleted`);
-  res.json({ ok: true });
+  try {
+    db.transaction(() => {
+      // Delete feedback referencing this episode's sources first
+      const sourceIds = db.prepare('SELECT id FROM sources WHERE episode_id = ?').all(episode.id).map(r => r.id);
+      if (sourceIds.length > 0) {
+        db.prepare(`DELETE FROM feedback WHERE source_id IN (${sourceIds.map(() => '?').join(',')})`).run(...sourceIds);
+      }
+      db.prepare('DELETE FROM feedback WHERE episode_id = ?').run(episode.id);
+      db.prepare('UPDATE contributed_urls SET episode_id = NULL WHERE episode_id = ?').run(episode.id);
+      db.prepare('DELETE FROM sources WHERE episode_id = ?').run(episode.id);
+      db.prepare('DELETE FROM episodes WHERE id = ?').run(episode.id);
+    })();
+    console.log(`[delete] Episode ${episode.number} deleted`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(`[delete] Failed to delete episode ${episode.id}:`, err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── EPISODE IMPORT (pre-written script from Cowork interview workflow) ───────
