@@ -224,7 +224,8 @@ app.get('/api/settings', (req, res) => {
   const daysSince = lastPub?.d
     ? Math.floor((Date.now() - new Date(lastPub.d)) / (1000 * 60 * 60 * 24))
     : null;
-  res.json({ show_active: isShowActive(), last_published: lastPub?.d || null, days_since_published: daysSince });
+  const hasScheduled = !!db.prepare("SELECT 1 FROM episodes WHERE status = 'scheduled' LIMIT 1").get();
+  res.json({ show_active: isShowActive(), last_published: lastPub?.d || null, days_since_published: daysSince, has_scheduled: hasScheduled });
 });
 
 app.post('/api/settings/active', (req, res) => {
@@ -1456,14 +1457,18 @@ cron.schedule('0 9 * * 0-5', async () => {
     "SELECT MAX(date) as d FROM episodes WHERE status = 'published'"
   ).get();
 
-  const daysSinceAny = lastPublished.d
+  const daysSincePublished = lastPublished.d
     ? (now - new Date(lastPublished.d)) / (1000 * 60 * 60 * 24)
     : 999;
 
-  console.log(`[cron] Days since last published episode: ${daysSinceAny.toFixed(1)}`);
+  const hasScheduled = db.prepare(
+    "SELECT 1 FROM episodes WHERE status = 'scheduled' LIMIT 1"
+  ).get();
 
-  if (daysSinceAny <= 3) {
-    console.log('[cron] Fallback not needed, skipping.');
+  console.log(`[cron] Days since last published episode: ${daysSincePublished.toFixed(1)}; scheduled in queue: ${!!hasScheduled}`);
+
+  if (daysSincePublished <= 7 || hasScheduled) {
+    console.log('[cron] Fallback not needed — episode published recently or one is scheduled.');
     return;
   }
 
