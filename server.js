@@ -21,9 +21,7 @@ const ELEVENLABS_ADAM_VOICE_ID = process.env.ELEVENLABS_ADAM_VOICE_ID || ''; // 
 const AUDIO_DIR = process.env.AUDIO_DIR || path.join(__dirname, 'audio');
 if (!fs.existsSync(AUDIO_DIR)) fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
-// Strip ID3v2 header from an MP3 buffer. ElevenLabs embeds a TLEN tag in each chunk
-// describing only that chunk's duration; Apple Podcasts trusts TLEN for its in-player
-// timer. Removing all headers lets players derive duration from file size (CBR 128 kbps).
+// Strip ID3v2 header from an MP3 buffer.
 function stripId3v2(buf) {
   if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) { // 'ID3'
     const size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) |
@@ -31,6 +29,52 @@ function stripId3v2(buf) {
     return buf.slice(10 + size);
   }
   return buf;
+}
+
+// Strip the Xing/Info MPEG frame from the start of an MP3 buffer (assumes ID3v2 already
+// removed). ElevenLabs embeds a LAME CBR Info frame in each chunk describing only that
+// chunk's frame count. After concatenating chunks, Apple Podcasts reads this first Info
+// frame and shows only the first chunk's duration as the in-player timer. Removing it
+// forces Apple to derive duration from the actual frame count or file size instead.
+function stripXingInfoFrame(buf) {
+  // Find the first MPEG sync word (0xFF 0xEx)
+  let syncPos = -1;
+  for (let i = 0; i < Math.min(buf.length - 4, 256); i++) {
+    if (buf[i] === 0xFF && (buf[i + 1] & 0xE0) === 0xE0) { syncPos = i; break; }
+  }
+  if (syncPos === -1) return buf;
+
+  // Parse the 4-byte MPEG frame header
+  const h = (buf[syncPos] << 24) | (buf[syncPos + 1] << 16) | (buf[syncPos + 2] << 8) | buf[syncPos + 3];
+  const bitrateIndex = (h >> 12) & 0xF;
+  const srIndex      = (h >> 10) & 0x3;
+  const padding      = (h >>  9) & 0x1;
+  const channelMode  = (h >>  6) & 0x3; // 3 = mono
+
+  // MPEG1 Layer3 bitrate table (index → bps) and sample rates
+  const bitrates   = [0,32,40,48,56,64,80,96,112,128,160,192,224,256,320,0].map(k => k * 1000);
+  const sampleRates = [44100, 48000, 32000, 0];
+  const bitrate    = bitrates[bitrateIndex];
+  const sampleRate = sampleRates[srIndex];
+  if (!bitrate || !sampleRate) return buf;
+
+  const frameSize   = Math.floor(144 * bitrate / sampleRate) + padding;
+  const sideInfoLen = channelMode === 3 ? 17 : 32; // mono vs stereo
+  const xingOffset  = syncPos + 4 + sideInfoLen;
+
+  if (xingOffset + 4 <= buf.length) {
+    const tag = buf.toString('ascii', xingOffset, xingOffset + 4);
+    if (tag === 'Xing' || tag === 'Info') {
+      return buf.slice(syncPos + frameSize);
+    }
+  }
+  return buf;
+}
+
+// Combined: strip ID3v2 then Xing/Info MPEG frame. Apply to every chunk so that
+// concatenated dialogue audio has no per-chunk metadata that confuses Apple Podcasts.
+function stripMp3Headers(buf) {
+  return stripXingInfoFrame(stripId3v2(buf));
 }
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
@@ -352,6 +396,19 @@ app.patch('/api/episodes/:id/status', (req, res) => {
 
   db.prepare('UPDATE episodes SET status = COALESCE(?, status), publish_at = ? WHERE id = ?')
     .run(status || null, publish_at || null, req.params.id);
+
+  // When publishing, update the title's date suffix to the actual publish date so
+  // pre-written episodes don't show the generation date instead of the air date.
+  if (status === 'published' && episode.title && / · [A-Za-z]+ \d{1,2}, \d{4}$/.test(episode.title)) {
+    const effectiveDate = publish_at || episode.publish_at || new Date().toISOString().split('T')[0];
+    const dateLabel = new Date(effectiveDate + 'T12:00:00Z').toLocaleDateString('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC'
+    });
+    const updatedTitle = episode.title.replace(/ · [A-Za-z]+ \d{1,2}, \d{4}$/, ` · ${dateLabel}`);
+    if (updatedTitle !== episode.title) {
+      db.prepare('UPDATE episodes SET title = ? WHERE id = ?').run(updatedTitle, episode.id);
+    }
+  }
 
   console.log(`[status] Episode ${episode.number} → ${status || episode.status}${publish_at ? ` (publish: ${publish_at})` : ''}`);
   if (status === 'published') pingWebSub();
@@ -968,11 +1025,12 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
           );
           buffers.push(Buffer.from(response.data));
         }
-        // Strip ID3v2 headers from all chunks — ElevenLabs embeds a TLEN tag in each
-        // chunk's header describing only that chunk's duration. Apple Podcasts trusts TLEN
-        // for its in-player timer, causing it to show only the first chunk's length.
-        // Stripping all headers lets players derive duration from file size (CBR 128 kbps).
-        audioData = Buffer.concat(buffers.map(stripId3v2));
+        // Strip ID3v2 + Xing/Info MPEG frame from every chunk. ElevenLabs embeds a
+        // per-chunk Info frame whose frame count covers only that chunk; Apple Podcasts
+        // reads the first Info frame to compute the in-player timer, showing only the
+        // first chunk's length. Removing all per-chunk headers lets Apple derive
+        // duration from the full concatenated frame count or file size instead.
+        audioData = Buffer.concat(buffers.map(stripMp3Headers));
       } else {
         // ── Single-voice monologue: use text-to-speech endpoint ──────────────
         const response = await axios.post(
@@ -989,7 +1047,8 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
             timeout: 300000
           }
         );
-        audioData = response.data;
+        // Strip ID3v2 + Xing/Info from monologue too for consistent header-free output.
+        audioData = stripMp3Headers(Buffer.from(audioData));
       }
 
       // Abort if a newer job cancelled this one while ElevenLabs was running
@@ -1468,6 +1527,16 @@ cron.schedule('0 5 * * *', async () => {
 
   for (const ep of due) {
     db.prepare("UPDATE episodes SET status = 'published' WHERE id = ?").run(ep.id);
+    // Update title date suffix to match the scheduled air date, not the generation date.
+    if (ep.title && ep.publish_at && / · [A-Za-z]+ \d{1,2}, \d{4}$/.test(ep.title)) {
+      const dateLabel = new Date(ep.publish_at + 'T12:00:00Z').toLocaleDateString('en-US', {
+        month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC'
+      });
+      const updatedTitle = ep.title.replace(/ · [A-Za-z]+ \d{1,2}, \d{4}$/, ` · ${dateLabel}`);
+      if (updatedTitle !== ep.title) {
+        db.prepare('UPDATE episodes SET title = ? WHERE id = ?').run(updatedTitle, ep.id);
+      }
+    }
     console.log(`[auto-publish] Episode ${ep.number} published (was scheduled for ${ep.publish_at})`);
   }
   pingWebSub();
@@ -1583,8 +1652,9 @@ app.post('/api/admin/migrate/resync-durations', requireAuth, async (req, res) =>
   res.json(results);
 });
 
-// One-time migration: strip ID3v2 headers from existing MP3 files so Apple Podcasts
-// reads the correct in-player timer (was showing only the first chunk's TLEN duration).
+// Migration: strip ID3v2 headers + Xing/Info MPEG frames from existing MP3 files.
+// Removes per-chunk metadata that causes Apple Podcasts to show only the first
+// chunk's duration as the in-player timer.
 app.post('/api/admin/migrate/restrip-audio', requireAuth, async (req, res) => {
   const episodes = db.prepare('SELECT id, audio_filename FROM episodes WHERE audio_filename IS NOT NULL').all();
   const results = { updated: 0, skipped: 0, errors: [] };
@@ -1593,7 +1663,7 @@ app.post('/api/admin/migrate/restrip-audio', requireAuth, async (req, res) => {
     if (!fs.existsSync(audioPath)) { results.skipped++; continue; }
     try {
       const original = fs.readFileSync(audioPath);
-      const stripped = stripId3v2(original);
+      const stripped = stripMp3Headers(original);
       if (stripped.length === original.length) { results.skipped++; continue; }
       fs.writeFileSync(audioPath, stripped);
       const seconds = Math.round(stripped.length / 16000);

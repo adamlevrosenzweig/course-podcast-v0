@@ -1446,6 +1446,7 @@ function ApplePodcastsRefreshCard() {
     setState('running');
     setMessage('');
     try {
+      await apiFetch('/api/admin/migrate/restrip-audio', { method: 'POST' });
       await apiFetch('/api/admin/migrate/resync-durations', { method: 'POST' });
       const result = await apiFetch('/api/admin/ping-websub', { method: 'POST' });
       setState('done');
