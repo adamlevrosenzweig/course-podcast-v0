@@ -73,6 +73,7 @@ Public routes (no auth): `/feed.xml`, `/audio/*`, `/episodes/:id/transcript`, st
 - `POST /api/contributed` — add URL, pasted text, or file to source queue
 - `POST /api/admin/migrate/resync-summaries` — re-summarize all episodes + regenerate show notes
 - `POST /api/admin/migrate/resync-durations` — backfill accurate audio durations from MP3 metadata
+- `POST /api/admin/migrate/restrip-audio` — strip ID3v2 headers from all existing MP3s (fixes Apple Podcasts in-player timer showing wrong duration)
 
 ## Studio console (Claude Code as primary interface)
 
@@ -97,6 +98,7 @@ All four constants in `server.js` require the `MEGAN:` speaker prefix.
 - Every line must begin with `MEGAN:` or `ADAM:` — no unlabeled paragraphs
 - No markdown formatting — plain text only
 - Post-processing strips `**MEGAN**:` → `MEGAN:` and normalizes casing
+- Always end the script body with a transitional MEGAN sentence that lands the episode's main point before the hardcoded outro — without it the outro feels abrupt
 
 ### Adam's dialogue style
 - Casual register — contractions, sentence fragments, natural profanity

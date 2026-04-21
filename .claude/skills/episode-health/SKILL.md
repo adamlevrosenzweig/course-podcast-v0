@@ -31,7 +31,8 @@ ID  | Title                        | Status    | Issues
 
 After the table, list available fixes for any issues found:
 - Resync all summaries + show notes: `POST /api/admin/migrate/resync-summaries`
-- Resync all durations: `POST /api/admin/migrate/resync-durations`
+- Resync all durations (recalc from file size): `POST /api/admin/migrate/resync-durations`
+- Strip ID3v2 headers from all MP3s (fixes Apple Podcasts timer): `POST /api/admin/migrate/restrip-audio`
 - Re-summarize one episode: `POST /api/episodes/{id}/summarize`
 - Regenerate show notes: `POST /api/episodes/{id}/show-notes/generate`
 
