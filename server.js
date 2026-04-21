@@ -305,6 +305,13 @@ app.post('/api/contributed', (req, res) => {
   res.json(db.prepare('SELECT * FROM contributed_urls WHERE id = ?').get(result.lastInsertRowid));
 });
 
+app.delete('/api/contributed/:id', requireAuth, (req, res) => {
+  const row = db.prepare('SELECT id FROM contributed_urls WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  db.prepare('DELETE FROM contributed_urls WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
 // ─── EPISODES ────────────────────────────────────────────────────────────────
 
 app.get('/api/episodes', (req, res) => {
