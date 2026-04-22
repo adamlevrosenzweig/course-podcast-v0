@@ -1012,7 +1012,10 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
             {
               inputs: chunks[i].map(t => ({
                 text: t.text,
-                voice_id: t.speaker === 'ADAM' ? ELEVENLABS_ADAM_VOICE_ID : ELEVENLABS_VOICE_ID
+                voice_id: t.speaker === 'ADAM' ? ELEVENLABS_ADAM_VOICE_ID : ELEVENLABS_VOICE_ID,
+                voice_settings: t.speaker === 'MEGAN'
+                  ? { stability: 0.80, similarity_boost: 0.80, style: 0.05, use_speaker_boost: true }
+                  : { stability: 0.50, similarity_boost: 0.75, style: 0.30, use_speaker_boost: true }
               })),
               model_id: 'eleven_v3',
               output_format: 'mp3_44100_128'
