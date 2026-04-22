@@ -1011,10 +1011,10 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
             'https://api.elevenlabs.io/v1/text-to-dialogue',
             {
               inputs: chunks[i].map(t => ({
-                text: t.speaker === 'MEGAN' ? `[Irish accent] ${t.text}` : t.text,
+                text: t.text,
                 voice_id: t.speaker === 'ADAM' ? ELEVENLABS_ADAM_VOICE_ID : ELEVENLABS_VOICE_ID,
                 voice_settings: t.speaker === 'MEGAN'
-                  ? { stability: 0.60, similarity_boost: 0.90, style: 0.05, use_speaker_boost: true }
+                  ? { stability: 0.50, similarity_boost: 0.75, style: 0.20, use_speaker_boost: true }
                   : { stability: 0.50, similarity_boost: 0.75, style: 0.30, use_speaker_boost: true }
               })),
               model_id: 'eleven_v3',
