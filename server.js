@@ -1015,7 +1015,8 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
                 voice_id: t.speaker === 'ADAM' ? ELEVENLABS_ADAM_VOICE_ID : ELEVENLABS_VOICE_ID
               })),
               model_id: 'eleven_v3',
-              output_format: 'mp3_44100_128'
+              output_format: 'mp3_44100_128',
+              language_code: 'en-IE'
             },
             {
               headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
