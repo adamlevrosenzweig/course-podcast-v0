@@ -1011,7 +1011,7 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
             'https://api.elevenlabs.io/v1/text-to-dialogue',
             {
               inputs: chunks[i].map(t => ({
-                text: t.text,
+                text: t.speaker === 'MEGAN' ? `[Irish accent] ${t.text}` : t.text,
                 voice_id: t.speaker === 'ADAM' ? ELEVENLABS_ADAM_VOICE_ID : ELEVENLABS_VOICE_ID,
                 voice_settings: t.speaker === 'MEGAN'
                   ? { stability: 0.60, similarity_boost: 0.90, style: 0.05, use_speaker_boost: true }
@@ -1051,7 +1051,7 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
           }
         );
         // Strip ID3v2 + Xing/Info from monologue too for consistent header-free output.
-        audioData = stripMp3Headers(Buffer.from(audioData));
+        audioData = stripMp3Headers(Buffer.from(response.data));
       }
 
       // Abort if a newer job cancelled this one while ElevenLabs was running

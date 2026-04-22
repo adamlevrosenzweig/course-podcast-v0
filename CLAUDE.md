@@ -140,6 +140,15 @@ Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by se
 - New audio POST cancels any running job for that episode
 - Episode re-read from DB right before calling ElevenLabs (uses latest saved script)
 - Audio served with `Cache-Control: no-cache`; Queue player appends `?v=timestamp` on completion
+
+### Voice settings (text-to-dialogue)
+Per-input `voice_settings` and an accent tag are passed to every Megan turn. **Do not remove these** — they prevent her Irish accent from drifting over long episodes.
+- **Megan text:** prefixed with `[Irish accent]` at API call time (not stored in script) — `eleven_v3` normalizes non-English accents without this tag
+- **Megan voice_settings:** `{ stability: 0.60, similarity_boost: 0.90, style: 0.05, use_speaker_boost: true }`
+- **Adam voice_settings:** `{ stability: 0.50, similarity_boost: 0.75, style: 0.30, use_speaker_boost: true }`
+- **Do not add `language_code`** — `en-IE` was tried and reverted; it degraded quality without fixing drift
+- If `[Irish accent]` proves too subtle, the stronger variant is `[thick Irish accent]`
+- Monologue (`text-to-speech`) uses the same Adam defaults via top-level `voice_settings`
 - `audio_duration_seconds` calculated as `audioBuffer.length / 16000` (CBR 128 kbps = 16000 bytes/sec) at audio generation time; RSS falls back to same calculation from file size, then `duration_estimate * 60`
 - `<itunes:duration>` formatted as `M:SS` or `H:MM:SS` via `toHMS()` helper in the feed route
 - Queue UI shows `M:SS` from `audio_duration_seconds` when available; shows nothing for drafts without audio (`duration_estimate` no longer displayed)
