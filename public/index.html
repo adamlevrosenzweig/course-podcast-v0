@@ -1061,7 +1061,7 @@ function ArchivePage() {
       <button className="btn btn-ghost btn-sm" onClick={() => setSelected(null)} style={{marginBottom:'24px'}}>
         ← All Episodes
       </button>
-      <div className="card-meta">Episode {selected.number} · {selected.date}</div>
+      <div className="card-meta">Episode {selected.number} · {selected.date} · id:{selected.id}</div>
       <h1 className="page-title" style={{marginBottom:'24px'}}>Episode {selected.number}</h1>
 
       {selected.audio_filename && (
@@ -1097,7 +1097,7 @@ function ArchivePage() {
         <div key={ep.id} className="ep-item" onClick={() => selectEp(ep)}>
           <span className="ep-num">#{ep.number}</span>
           <span className="ep-title">{ep.title || ep.date}</span>
-          <span className="ep-meta">{ep.source_count} sources{ep.audio_duration_seconds ? ` · ${Math.floor(ep.audio_duration_seconds/60)}:${String(ep.audio_duration_seconds%60).padStart(2,'0')}` : ''}</span>
+          <span className="ep-meta">{ep.source_count} sources{ep.audio_duration_seconds ? ` · ${Math.floor(ep.audio_duration_seconds/60)}:${String(ep.audio_duration_seconds%60).padStart(2,'0')}` : ''} · id:{ep.id}</span>
         </div>
       ))}
     </div>
