@@ -1443,6 +1443,19 @@ app.post('/api/feedback', (req, res) => {
   res.json(db.prepare('SELECT * FROM feedback WHERE id = ?').get(result.lastInsertRowid));
 });
 
+// ─── AUDIO DIAGNOSTICS ───────────────────────────────────────────────────────
+
+app.get('/api/admin/audio-diagnostics', requireAuth, async (req, res) => {
+  const musicFile = process.env.MUSIC_FILE || path.join(__dirname, 'sounds', 'music.mp3');
+  const musicExists = fs.existsSync(musicFile);
+  let ffmpegVersion = null, ffmpegError = null;
+  try {
+    const { stdout } = await execFileAsync('ffmpeg', ['-version']);
+    ffmpegVersion = stdout.split('\n')[0];
+  } catch (err) { ffmpegError = err.message; }
+  res.json({ musicFile, musicExists, ffmpegVersion, ffmpegError });
+});
+
 // ─── VOICES (ElevenLabs) ─────────────────────────────────────────────────────
 
 app.get('/api/voices', async (req, res) => {
