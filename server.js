@@ -11,6 +11,7 @@ const os = require('os');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
+const ffmpegBin = require('ffmpeg-static');
 const db = require('./database');
 const cron = require('node-cron');
 
@@ -273,7 +274,7 @@ async function mixWithFfmpeg(speechBuffers) {
 
       // Intro: 6s sting at full vol → music fades out over 6s while speech plays
       const introOut = path.join(tmpDir, 'intro.mp3');
-      await execFileAsync('ffmpeg', [
+      await execFileAsync(ffmpegBin, [
         '-stream_loop', '-1', '-i', musicFile, '-i', introFile,
         '-filter_complex',
           `[0:a]asplit=2[ms][mb];` +
@@ -287,7 +288,7 @@ async function mixWithFfmpeg(speechBuffers) {
 
       // Outro: ducked bed under speech → 15s trail at full vol → 3s fade out
       const outroOut = path.join(tmpDir, 'outro.mp3');
-      await execFileAsync('ffmpeg', [
+      await execFileAsync(ffmpegBin, [
         '-stream_loop', '-1', '-i', musicFile, '-i', outroFile,
         '-filter_complex',
           `[0:a]asplit=2[mb][ms];` +
@@ -302,7 +303,7 @@ async function mixWithFfmpeg(speechBuffers) {
       // Concat intro + body + outro, then loudnorm
       const parts = [introOut, ...bodyFiles, outroOut];
       fs.writeFileSync(listFile, parts.map(f => `file '${f}'`).join('\n'));
-      await execFileAsync('ffmpeg', [
+      await execFileAsync(ffmpegBin, [
         '-f', 'concat', '-safe', '0', '-i', listFile,
         '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
         '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', outputFile
@@ -310,7 +311,7 @@ async function mixWithFfmpeg(speechBuffers) {
     } else {
       // No music or single-turn: concat + loudnorm only
       fs.writeFileSync(listFile, turnFiles.map(f => `file '${f}'`).join('\n'));
-      await execFileAsync('ffmpeg', [
+      await execFileAsync(ffmpegBin, [
         '-f', 'concat', '-safe', '0', '-i', listFile,
         '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
         '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', outputFile
@@ -1450,10 +1451,10 @@ app.get('/api/admin/audio-diagnostics', requireAuth, async (req, res) => {
   const musicExists = fs.existsSync(musicFile);
   let ffmpegVersion = null, ffmpegError = null;
   try {
-    const { stdout } = await execFileAsync('ffmpeg', ['-version']);
+    const { stdout } = await execFileAsync(ffmpegBin, ['-version']);
     ffmpegVersion = stdout.split('\n')[0];
   } catch (err) { ffmpegError = err.message; }
-  res.json({ musicFile, musicExists, ffmpegVersion, ffmpegError });
+  res.json({ musicFile, musicExists, ffmpegBin, ffmpegVersion, ffmpegError });
 });
 
 // ─── VOICES (ElevenLabs) ─────────────────────────────────────────────────────
