@@ -258,13 +258,6 @@ async function mixWithFfmpeg(speechBuffers) {
     const outputFile = path.join(tmpDir, 'output.mp3');
     const listFile = path.join(tmpDir, 'list.txt');
 
-    // 300ms silence between speaker turns softens voice-model transitions
-    const silenceFile = path.join(tmpDir, 'silence.mp3');
-    await execFileAsync(ffmpegBin, [
-      '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo', '-t', '0.3',
-      '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', silenceFile
-    ]);
-
     if (musicExists && turnFiles.length >= 2) {
       const INTRO_STING  = 6;   // seconds of solo music before speech starts
       const INTRO_FADE   = 6;   // seconds for music to fade under intro speech
@@ -279,15 +272,16 @@ async function mixWithFfmpeg(speechBuffers) {
       const outroDur = await getAudioDuration(outroFile);
 
       // Intro: adelay shifts speech right by INTRO_STING seconds so the sting plays
-      // alone first; amix duration=longest keeps the full speech, no internal concat.
+      // alone first. Speech is listed first in amix with duration=first so the output
+      // ends when speech ends, not when the shorter music stream ends.
       const introOut = path.join(tmpDir, 'intro.mp3');
       await execFileAsync(ffmpegBin, [
         '-stream_loop', '-1', '-i', musicFile, '-i', introFile,
         '-filter_complex',
+          `[1:a]adelay=${INTRO_STING * 1000}|${INTRO_STING * 1000}[speech];` +
           `[0:a]atrim=0:${INTRO_STING + INTRO_FADE},asetpts=PTS-STARTPTS,` +
             `afade=t=out:st=${INTRO_STING}:d=${INTRO_FADE}[music];` +
-          `[1:a]adelay=${INTRO_STING * 1000}|${INTRO_STING * 1000}[speech];` +
-          `[music][speech]amix=inputs=2:duration=longest:normalize=0[out]`,
+          `[speech][music]amix=inputs=2:duration=first:normalize=0[out]`,
         '-map', '[out]', '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', introOut
       ]);
 
@@ -298,20 +292,15 @@ async function mixWithFfmpeg(speechBuffers) {
         '-filter_complex',
           `[0:a]asplit=2[mb][ms];` +
           `[mb]atrim=0:${outroDur},asetpts=PTS-STARTPTS,volume=${BED}[bed];` +
-          `[bed][1:a]amix=inputs=2:duration=longest:normalize=0[mix];` +
+          `[1:a][bed]amix=inputs=2:duration=first:normalize=0[mix];` +
           `[ms]atrim=${outroDur}:${outroDur + OUTRO_TRAIL},asetpts=PTS-STARTPTS,` +
             `afade=t=in:d=0.5,afade=t=out:st=${OUTRO_TRAIL - OUTRO_FADE}:d=${OUTRO_FADE}[trail];` +
           `[mix][trail]concat=n=2:v=0:a=1[out]`,
         '-map', '[out]', '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', outroOut
       ]);
 
-      // Assemble: intro + silence + body turns (with silence between) + silence + outro
-      const bodyParts = [];
-      for (let i = 0; i < bodyFiles.length; i++) {
-        if (i > 0) bodyParts.push(silenceFile);
-        bodyParts.push(bodyFiles[i]);
-      }
-      const parts = [introOut, silenceFile, ...bodyParts, silenceFile, outroOut];
+      // Assemble: intro + body turns + outro, then loudnorm
+      const parts = [introOut, ...bodyFiles, outroOut];
       fs.writeFileSync(listFile, parts.map(f => `file '${f}'`).join('\n'));
       await execFileAsync(ffmpegBin, [
         '-f', 'concat', '-safe', '0', '-i', listFile,
@@ -319,13 +308,8 @@ async function mixWithFfmpeg(speechBuffers) {
         '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', outputFile
       ]);
     } else {
-      // No music or single-turn: concat with silence between turns + loudnorm
-      const parts = [];
-      for (let i = 0; i < turnFiles.length; i++) {
-        if (i > 0) parts.push(silenceFile);
-        parts.push(turnFiles[i]);
-      }
-      fs.writeFileSync(listFile, parts.map(f => `file '${f}'`).join('\n'));
+      // No music or single-turn: concat + loudnorm only
+      fs.writeFileSync(listFile, turnFiles.map(f => `file '${f}'`).join('\n'));
       await execFileAsync(ffmpegBin, [
         '-f', 'concat', '-safe', '0', '-i', listFile,
         '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
@@ -339,7 +323,7 @@ async function mixWithFfmpeg(speechBuffers) {
     return Buffer.concat(speechBuffers.map(b => stripMp3Headers(b)));
   } finally {
     for (const f of turnFiles) { try { fs.unlinkSync(f); } catch {} }
-    for (const n of ['list.txt', 'silence.mp3', 'intro.mp3', 'outro.mp3', 'output.mp3']) {
+    for (const n of ['list.txt', 'intro.mp3', 'outro.mp3', 'output.mp3']) {
       try { fs.unlinkSync(path.join(tmpDir, n)); } catch {}
     }
     try { fs.rmdirSync(tmpDir); } catch {}
