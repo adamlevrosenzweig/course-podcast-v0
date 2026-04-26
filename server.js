@@ -225,9 +225,22 @@ async function generateTurnAudio(text, voiceId, voiceSettings) {
   return stripMp3Headers(Buffer.from(response.data));
 }
 
-// Concatenate MP3 buffers + loudnorm via ffmpeg. Optional intro/outro music via
-// MUSIC_INTRO_FILE / MUSIC_OUTRO_FILE env vars (paths to MP3 files on disk).
-// Falls back to raw concat if ffmpeg is unavailable.
+async function getAudioDuration(filePath) {
+  try {
+    const { stdout } = await execFileAsync('ffprobe', [
+      '-v', 'quiet', '-show_entries', 'format=duration', '-of', 'csv=p=0', filePath
+    ]);
+    return parseFloat(stdout.trim());
+  } catch {
+    return fs.statSync(filePath).size / 16000;
+  }
+}
+
+// Mix speech turn buffers with optional music bed (MUSIC_FILE env var).
+// Dialogue (>=2 turns): 4s solo sting → ducked bed under first turn → body turns →
+//   ducked bed under last turn → 4s solo sting → fade out. All loudnorm'd.
+// Monologue / no music: concat + loudnorm only.
+// Falls back to raw concat if ffmpeg unavailable.
 async function mixWithFfmpeg(speechBuffers) {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'overhang-'));
   const turnFiles = [];
@@ -237,29 +250,78 @@ async function mixWithFfmpeg(speechBuffers) {
       fs.writeFileSync(p, speechBuffers[i]);
       turnFiles.push(p);
     }
-    const introFile = process.env.MUSIC_INTRO_FILE;
-    const outroFile = process.env.MUSIC_OUTRO_FILE;
-    const concatEntries = [
-      ...(introFile && fs.existsSync(introFile) ? [introFile] : []),
-      ...turnFiles,
-      ...(outroFile && fs.existsSync(outroFile) ? [outroFile] : []),
-    ];
-    const listFile = path.join(tmpDir, 'list.txt');
-    fs.writeFileSync(listFile, concatEntries.map(f => `file '${f}'`).join('\n'));
+
+    const musicFile = process.env.MUSIC_FILE;
     const outputFile = path.join(tmpDir, 'output.mp3');
-    await execFileAsync('ffmpeg', [
-      '-f', 'concat', '-safe', '0', '-i', listFile,
-      '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
-      '-codec:a', 'libmp3lame', '-b:a', '128k',
-      '-y', outputFile
-    ]);
+    const listFile = path.join(tmpDir, 'list.txt');
+
+    if (musicFile && fs.existsSync(musicFile) && turnFiles.length >= 2) {
+      const STING = 4;    // seconds of solo music before/after speech
+      const BED  = 0.15;  // music volume under speech
+      const FADE = 1;     // fade duration in seconds
+
+      const introFile = turnFiles[0];
+      const outroFile = turnFiles[turnFiles.length - 1];
+      const bodyFiles = turnFiles.slice(1, -1);
+
+      const introDur = await getAudioDuration(introFile);
+      const outroDur = await getAudioDuration(outroFile);
+
+      // Intro section: 4s sting → ducked bed under intro speech → fade out
+      const introOut = path.join(tmpDir, 'intro.mp3');
+      await execFileAsync('ffmpeg', [
+        '-stream_loop', '-1', '-i', musicFile, '-i', introFile,
+        '-filter_complex',
+          `[0:a]asplit=2[ms][mb];` +
+          `[ms]atrim=0:${STING},asetpts=PTS-STARTPTS[sting];` +
+          `[mb]atrim=${STING}:${STING + introDur + FADE},asetpts=PTS-STARTPTS,` +
+            `volume=${BED},afade=t=out:st=${introDur}:d=${FADE}[bed];` +
+          `[1:a][bed]amix=inputs=2:duration=longest[mix];` +
+          `[sting][mix]concat=n=2:v=0:a=1[out]`,
+        '-map', '[out]', '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', introOut
+      ]);
+
+      // Outro section: ducked bed under outro speech → 4s sting → fade out
+      const outroOut = path.join(tmpDir, 'outro.mp3');
+      await execFileAsync('ffmpeg', [
+        '-stream_loop', '-1', '-i', musicFile, '-i', outroFile,
+        '-filter_complex',
+          `[0:a]asplit=2[mb][ms];` +
+          `[mb]atrim=0:${outroDur},asetpts=PTS-STARTPTS,volume=${BED}[bed];` +
+          `[bed][1:a]amix=inputs=2:duration=longest[mix];` +
+          `[ms]atrim=${outroDur}:${outroDur + STING + FADE},asetpts=PTS-STARTPTS,` +
+            `afade=t=in:d=0.5,afade=t=out:st=${STING}:d=${FADE}[sting];` +
+          `[mix][sting]concat=n=2:v=0:a=1[out]`,
+        '-map', '[out]', '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', outroOut
+      ]);
+
+      // Concat intro + body + outro, then loudnorm
+      const parts = [introOut, ...bodyFiles, outroOut];
+      fs.writeFileSync(listFile, parts.map(f => `file '${f}'`).join('\n'));
+      await execFileAsync('ffmpeg', [
+        '-f', 'concat', '-safe', '0', '-i', listFile,
+        '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+        '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', outputFile
+      ]);
+    } else {
+      // No music or single-turn: concat + loudnorm only
+      fs.writeFileSync(listFile, turnFiles.map(f => `file '${f}'`).join('\n'));
+      await execFileAsync('ffmpeg', [
+        '-f', 'concat', '-safe', '0', '-i', listFile,
+        '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+        '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', outputFile
+      ]);
+    }
+
     return fs.readFileSync(outputFile);
   } catch (err) {
     console.error('[audio] ffmpeg error, falling back to raw concat:', err.message);
     return Buffer.concat(speechBuffers.map(b => stripMp3Headers(b)));
   } finally {
     for (const f of turnFiles) { try { fs.unlinkSync(f); } catch {} }
-    for (const name of ['list.txt', 'output.mp3']) { try { fs.unlinkSync(path.join(tmpDir, name)); } catch {} }
+    for (const n of ['list.txt', 'intro.mp3', 'outro.mp3', 'output.mp3']) {
+      try { fs.unlinkSync(path.join(tmpDir, n)); } catch {}
+    }
     try { fs.rmdirSync(tmpDir); } catch {}
   }
 }

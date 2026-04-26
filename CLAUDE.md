@@ -138,7 +138,7 @@ Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by se
 - **Dialogue:** one `text-to-speech` call per turn (`eleven_turbo_v2_5`), then ffmpeg concat + loudnorm. Old `text-to-dialogue` / `eleven_v3` path removed.
 - **Monologue:** single `text-to-speech` call, also routed through ffmpeg loudnorm for consistent volume.
 - ffmpeg installed via `nixpacks.toml` (`nixPkgs = ["ffmpeg"]`). Falls back to raw buffer concat if ffmpeg unavailable.
-- **Music:** set `MUSIC_INTRO_FILE` and/or `MUSIC_OUTRO_FILE` env vars (paths to MP3s) to prepend/append music stings. Both are optional — omit to skip music.
+- **Music:** set `MUSIC_FILE` env var (path to an MP3 on disk) to enable music. Produces: 4s solo sting → ducked bed (15% vol) under intro speech → episode body → ducked bed under outro speech → 4s solo sting → fade out. Omit to skip music entirely.
 - Audio jobs are in-memory; server restart clears them (Railway restarts on deploy)
 - New audio POST cancels any running job for that episode
 - Episode re-read from DB right before calling ElevenLabs (uses latest saved script)
