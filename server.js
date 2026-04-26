@@ -7,6 +7,10 @@ const axios = require('axios');
 const crypto = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
 const mm = require('music-metadata');
+const os = require('os');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const execFileAsync = promisify(execFile);
 const db = require('./database');
 const cron = require('node-cron');
 
@@ -210,25 +214,54 @@ function parseDialogue(script) {
   return turns.filter(t => t.text.length > 0);
 }
 
-// ─── CHUNK TURNS to stay under ElevenLabs 5000-char API limit ────────────────
-const DIALOGUE_CHAR_LIMIT = 4800;
+// ─── AUDIO HELPERS ────────────────────────────────────────────────────────────
 
-function chunkTurns(turns) {
-  const chunks = [];
-  let current = [];
-  let currentLen = 0;
-  for (const turn of turns) {
-    const len = turn.text.length + turn.speaker.length + 2;
-    if (current.length > 0 && currentLen + len > DIALOGUE_CHAR_LIMIT) {
-      chunks.push(current);
-      current = [];
-      currentLen = 0;
+async function generateTurnAudio(text, voiceId, voiceSettings) {
+  const response = await axios.post(
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+    { text, model_id: 'eleven_turbo_v2_5', output_format: 'mp3_44100_128', voice_settings: voiceSettings },
+    { headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json' }, responseType: 'arraybuffer', timeout: 60000 }
+  );
+  return stripMp3Headers(Buffer.from(response.data));
+}
+
+// Concatenate MP3 buffers + loudnorm via ffmpeg. Optional intro/outro music via
+// MUSIC_INTRO_FILE / MUSIC_OUTRO_FILE env vars (paths to MP3 files on disk).
+// Falls back to raw concat if ffmpeg is unavailable.
+async function mixWithFfmpeg(speechBuffers) {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'overhang-'));
+  const turnFiles = [];
+  try {
+    for (let i = 0; i < speechBuffers.length; i++) {
+      const p = path.join(tmpDir, `turn-${i}.mp3`);
+      fs.writeFileSync(p, speechBuffers[i]);
+      turnFiles.push(p);
     }
-    current.push(turn);
-    currentLen += len;
+    const introFile = process.env.MUSIC_INTRO_FILE;
+    const outroFile = process.env.MUSIC_OUTRO_FILE;
+    const concatEntries = [
+      ...(introFile && fs.existsSync(introFile) ? [introFile] : []),
+      ...turnFiles,
+      ...(outroFile && fs.existsSync(outroFile) ? [outroFile] : []),
+    ];
+    const listFile = path.join(tmpDir, 'list.txt');
+    fs.writeFileSync(listFile, concatEntries.map(f => `file '${f}'`).join('\n'));
+    const outputFile = path.join(tmpDir, 'output.mp3');
+    await execFileAsync('ffmpeg', [
+      '-f', 'concat', '-safe', '0', '-i', listFile,
+      '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+      '-codec:a', 'libmp3lame', '-b:a', '128k',
+      '-y', outputFile
+    ]);
+    return fs.readFileSync(outputFile);
+  } catch (err) {
+    console.error('[audio] ffmpeg error, falling back to raw concat:', err.message);
+    return Buffer.concat(speechBuffers.map(b => stripMp3Headers(b)));
+  } finally {
+    for (const f of turnFiles) { try { fs.unlinkSync(f); } catch {} }
+    for (const name of ['list.txt', 'output.mp3']) { try { fs.unlinkSync(path.join(tmpDir, name)); } catch {} }
+    try { fs.rmdirSync(tmpDir); } catch {}
   }
-  if (current.length > 0) chunks.push(current);
-  return chunks;
 }
 
 // ─── JEWISH CALENDAR: SHABBAT + HOLIDAY GUARD ────────────────────────────────
@@ -1005,45 +1038,25 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
       let audioData;
 
       if (freshEpisode.episode_type === 'dialogue' && ELEVENLABS_ADAM_VOICE_ID) {
-        // ── Two-speaker dialogue: chunked to stay under 5000-char API limit ──
+        // ── Per-speaker TTS: one eleven_turbo_v2_5 call per turn, then ffmpeg mix ──
         const turns = parseDialogue(freshEpisode.script);
         if (turns.length === 0) throw new Error('No dialogue turns found in script');
+        console.log(`[audio] ${turns.length} turn(s) for episode ${freshEpisode.number}`);
 
-        const chunks = chunkTurns(turns);
-        console.log(`[audio] ${chunks.length} chunk(s) for episode ${freshEpisode.number}`);
-
-        const buffers = [];
-        for (let i = 0; i < chunks.length; i++) {
-          job.step = `Generating audio chunk ${i + 1}/${chunks.length}...`;
-          const response = await axios.post(
-            'https://api.elevenlabs.io/v1/text-to-dialogue',
-            {
-              inputs: chunks[i].map(t => ({
-                text: t.text,
-                voice_id: t.speaker === 'ADAM' ? ELEVENLABS_ADAM_VOICE_ID : ELEVENLABS_VOICE_ID,
-                voice_settings: t.speaker === 'MEGAN'
-                  ? { stability: 0.50, similarity_boost: 0.75, style: 0.20, use_speaker_boost: true }
-                  : { stability: 0.50, similarity_boost: 0.75, style: 0.30, use_speaker_boost: true }
-              })),
-              model_id: 'eleven_v3',
-              output_format: 'mp3_44100_128'
-            },
-            {
-              headers: { 'xi-api-key': ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
-              responseType: 'arraybuffer',
-              timeout: 300000
-            }
-          );
-          buffers.push(Buffer.from(response.data));
+        const turnBuffers = [];
+        for (let i = 0; i < turns.length; i++) {
+          job.step = `Generating voice ${i + 1}/${turns.length}...`;
+          const voiceId = turns[i].speaker === 'ADAM' ? ELEVENLABS_ADAM_VOICE_ID : ELEVENLABS_VOICE_ID;
+          const voiceSettings = turns[i].speaker === 'ADAM'
+            ? { stability: 0.50, similarity_boost: 0.75, style: 0.30, use_speaker_boost: true }
+            : { stability: 0.50, similarity_boost: 0.75, style: 0.20, use_speaker_boost: true };
+          turnBuffers.push(await generateTurnAudio(turns[i].text, voiceId, voiceSettings));
         }
-        // Strip ID3v2 + Xing/Info MPEG frame from every chunk. ElevenLabs embeds a
-        // per-chunk Info frame whose frame count covers only that chunk; Apple Podcasts
-        // reads the first Info frame to compute the in-player timer, showing only the
-        // first chunk's length. Removing all per-chunk headers lets Apple derive
-        // duration from the full concatenated frame count or file size instead.
-        audioData = Buffer.concat(buffers.map(stripMp3Headers));
+
+        job.step = 'Mixing audio...';
+        audioData = await mixWithFfmpeg(turnBuffers);
       } else {
-        // ── Single-voice monologue: use text-to-speech endpoint ──────────────
+        // ── Single-voice monologue: one text-to-speech call ──────────────────
         const response = await axios.post(
           `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
           {
@@ -1058,8 +1071,8 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
             timeout: 300000
           }
         );
-        // Strip ID3v2 + Xing/Info from monologue too for consistent header-free output.
-        audioData = stripMp3Headers(Buffer.from(response.data));
+        job.step = 'Mixing audio...';
+        audioData = await mixWithFfmpeg([Buffer.from(response.data)]);
       }
 
       // Abort if a newer job cancelled this one while ElevenLabs was running

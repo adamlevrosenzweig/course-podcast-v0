@@ -135,19 +135,20 @@ Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by se
 
 ## Audio generation
 
-- Multi-chunk dialogue audio concatenated from ElevenLabs API calls; ID3v2 headers stripped after first chunk
+- **Dialogue:** one `text-to-speech` call per turn (`eleven_turbo_v2_5`), then ffmpeg concat + loudnorm. Old `text-to-dialogue` / `eleven_v3` path removed.
+- **Monologue:** single `text-to-speech` call, also routed through ffmpeg loudnorm for consistent volume.
+- ffmpeg installed via `nixpacks.toml` (`nixPkgs = ["ffmpeg"]`). Falls back to raw buffer concat if ffmpeg unavailable.
+- **Music:** set `MUSIC_INTRO_FILE` and/or `MUSIC_OUTRO_FILE` env vars (paths to MP3s) to prepend/append music stings. Both are optional — omit to skip music.
 - Audio jobs are in-memory; server restart clears them (Railway restarts on deploy)
 - New audio POST cancels any running job for that episode
 - Episode re-read from DB right before calling ElevenLabs (uses latest saved script)
 - Audio served with `Cache-Control: no-cache`; Queue player appends `?v=timestamp` on completion
 
-### Voice settings (text-to-dialogue)
-Per-input `voice_settings` are passed to every turn.
+### Voice settings (per-speaker TTS)
 - **Megan voice_settings:** `{ stability: 0.50, similarity_boost: 0.75, style: 0.20, use_speaker_boost: true }`
 - **Adam voice_settings:** `{ stability: 0.50, similarity_boost: 0.75, style: 0.30, use_speaker_boost: true }`
+- Model: `eleven_turbo_v2_5` for both speakers — handles accents cleanly (no eleven_v3 accent normalization issue)
 - **Do not add `language_code`** — `en-IE` was tried and reverted; it degraded quality
-- **eleven_v3 accent note:** this model normalizes non-standard English accents. Megan's voice is British (voice ID `kIYbb5iUo0dJb8oRw5Mt`) — chosen because eleven_v3 renders British cleanly. Do not swap in an Irish or other non-British/American voice without testing accent output first.
-- Monologue (`text-to-speech`) uses Adam's defaults via top-level `voice_settings`
 - `audio_duration_seconds` calculated as `audioBuffer.length / 16000` (CBR 128 kbps = 16000 bytes/sec) at audio generation time; RSS falls back to same calculation from file size, then `duration_estimate * 60`
 - `<itunes:duration>` formatted as `M:SS` or `H:MM:SS` via `toHMS()` helper in the feed route
 - Queue UI shows `M:SS` from `audio_duration_seconds` when available; shows nothing for drafts without audio (`duration_estimate` no longer displayed)
