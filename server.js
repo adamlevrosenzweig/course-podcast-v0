@@ -251,11 +251,13 @@ async function mixWithFfmpeg(speechBuffers) {
       turnFiles.push(p);
     }
 
-    const musicFile = process.env.MUSIC_FILE;
+    const musicFile = process.env.MUSIC_FILE || path.join(__dirname, 'sounds', 'music.mp3');
+    const musicExists = fs.existsSync(musicFile);
+    console.log(`[audio] music file: ${musicFile} — exists: ${musicExists}`);
     const outputFile = path.join(tmpDir, 'output.mp3');
     const listFile = path.join(tmpDir, 'list.txt');
 
-    if (musicFile && fs.existsSync(musicFile) && turnFiles.length >= 2) {
+    if (musicExists && turnFiles.length >= 2) {
       const INTRO_STING  = 6;   // seconds of solo music before speech
       const INTRO_FADE   = 6;   // seconds for music to fade out under speech
       const OUTRO_TRAIL  = 15;  // seconds of music after speech ends
