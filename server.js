@@ -276,25 +276,43 @@ async function mixWithFfmpeg(speechBuffers) {
     const listFile = path.join(tmpDir, 'list.txt');
 
     if (musicExists && turnFiles.length === 1) {
-      // Single-stream path (dialogue API or monologue): 6s sting → fading intro → speech → 15s trail
-      const INTRO_STING = 6;
-      const INTRO_FADE  = 6;
-      const OUTRO_TRAIL = 15;
-      const OUTRO_FADE  = 3;
+      // Single-stream path (dialogue API or monologue):
+      //   [solo sting] → [speech + fading music] → [speech only] → [outro trail]
+      //
+      // All segments have fixed, known durations via atrim — avoids adelay duration
+      // metadata issues that caused the last N seconds of speech to be truncated.
+      const INTRO_STING = 6;   // seconds of solo music before speech starts
+      const INTRO_FADE  = 30;  // seconds for music to fade out under speech
+      const OUTRO_TRAIL = 15;  // seconds of music after speech ends
+      const OUTRO_FADE  = 3;   // fade-out at end of outro trail
 
-      // Mix speech with intro sting using adelay (speech listed first → duration=first keeps full speech)
-      const speechOut = path.join(tmpDir, 'speech-with-sting.mp3');
+      // Step 1: Build the intro block (sting + fade overlay).
+      //   [sting]    = INTRO_STING s of music at full volume
+      //   [fade_mix] = INTRO_FADE s of speech mixed with INTRO_FADE s of fading music
+      //   Both trimmed to known lengths → internal concat is safe
+      const stingAndMix = path.join(tmpDir, 'sting-and-mix.mp3');
       await execFileAsync(ffmpegBin, [
         '-stream_loop', '-1', '-i', musicFile, '-i', turnFiles[0],
         '-filter_complex',
-          `[1:a]adelay=${INTRO_STING * 1000}|${INTRO_STING * 1000}[speech];` +
-          `[0:a]atrim=0:${INTRO_STING + INTRO_FADE},asetpts=PTS-STARTPTS,` +
-            `afade=t=out:st=${INTRO_STING}:d=${INTRO_FADE}[music];` +
-          `[speech][music]amix=inputs=2:duration=first:normalize=0[out]`,
-        '-map', '[out]', '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', speechOut
+          `[0:a]asplit=2[m1][m2];` +
+          `[m1]atrim=0:${INTRO_STING},asetpts=PTS-STARTPTS[sting];` +
+          `[m2]atrim=${INTRO_STING}:${INTRO_STING + INTRO_FADE},asetpts=PTS-STARTPTS,` +
+            `afade=t=out:st=0:d=${INTRO_FADE}[music_fade];` +
+          `[1:a]atrim=0:${INTRO_FADE},asetpts=PTS-STARTPTS[speech_start];` +
+          `[speech_start][music_fade]amix=inputs=2:duration=first:normalize=0[fade_mix];` +
+          `[sting][fade_mix]concat=n=2:v=0:a=1[out]`,
+        '-map', '[out]', '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', stingAndMix
       ]);
 
-      // Generate outro music trail
+      // Step 2: Rest of speech (after the intro fade is done — no music here).
+      const speechTail = path.join(tmpDir, 'speech-tail.mp3');
+      await execFileAsync(ffmpegBin, [
+        '-i', turnFiles[0],
+        '-af', `atrim=start=${INTRO_FADE},asetpts=PTS-STARTPTS`,
+        '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', speechTail
+      ]);
+
+      // Step 3: Outro trail.
       const trailOut = path.join(tmpDir, 'trail.mp3');
       await execFileAsync(ffmpegBin, [
         '-stream_loop', '-1', '-i', musicFile,
@@ -303,7 +321,8 @@ async function mixWithFfmpeg(speechBuffers) {
         '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', trailOut
       ]);
 
-      fs.writeFileSync(listFile, [speechOut, trailOut].map(f => `file '${f}'`).join('\n'));
+      // Step 4: Final concat + loudnorm.
+      fs.writeFileSync(listFile, [stingAndMix, speechTail, trailOut].map(f => `file '${f}'`).join('\n'));
       await execFileAsync(ffmpegBin, [
         '-f', 'concat', '-safe', '0', '-i', listFile,
         '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
@@ -325,7 +344,7 @@ async function mixWithFfmpeg(speechBuffers) {
     return Buffer.concat(speechBuffers.map(b => stripMp3Headers(b)));
   } finally {
     for (const f of turnFiles) { try { fs.unlinkSync(f); } catch {} }
-    for (const n of ['list.txt', 'speech-with-sting.mp3', 'trail.mp3', 'intro.mp3', 'outro.mp3', 'output.mp3']) {
+    for (const n of ['list.txt', 'sting-and-mix.mp3', 'speech-tail.mp3', 'trail.mp3', 'intro.mp3', 'outro.mp3', 'output.mp3']) {
       try { fs.unlinkSync(path.join(tmpDir, n)); } catch {}
     }
     try { fs.rmdirSync(tmpDir); } catch {}
