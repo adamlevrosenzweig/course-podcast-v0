@@ -256,9 +256,11 @@ async function mixWithFfmpeg(speechBuffers) {
     const listFile = path.join(tmpDir, 'list.txt');
 
     if (musicFile && fs.existsSync(musicFile) && turnFiles.length >= 2) {
-      const STING = 4;    // seconds of solo music before/after speech
-      const BED  = 0.15;  // music volume under speech
-      const FADE = 1;     // fade duration in seconds
+      const INTRO_STING  = 6;   // seconds of solo music before speech
+      const INTRO_FADE   = 6;   // seconds for music to fade out under speech
+      const OUTRO_TRAIL  = 15;  // seconds of music after speech ends
+      const OUTRO_FADE   = 3;   // fade-out at end of outro trail
+      const BED          = 0.15; // music volume under outro speech
 
       const introFile = turnFiles[0];
       const outroFile = turnFiles[turnFiles.length - 1];
@@ -267,21 +269,21 @@ async function mixWithFfmpeg(speechBuffers) {
       const introDur = await getAudioDuration(introFile);
       const outroDur = await getAudioDuration(outroFile);
 
-      // Intro section: 4s sting → ducked bed under intro speech → fade out
+      // Intro: 6s sting at full vol → music fades out over 6s while speech plays
       const introOut = path.join(tmpDir, 'intro.mp3');
       await execFileAsync('ffmpeg', [
         '-stream_loop', '-1', '-i', musicFile, '-i', introFile,
         '-filter_complex',
           `[0:a]asplit=2[ms][mb];` +
-          `[ms]atrim=0:${STING},asetpts=PTS-STARTPTS[sting];` +
-          `[mb]atrim=${STING}:${STING + introDur + FADE},asetpts=PTS-STARTPTS,` +
-            `volume=${BED},afade=t=out:st=${introDur}:d=${FADE}[bed];` +
-          `[1:a][bed]amix=inputs=2:duration=longest[mix];` +
+          `[ms]atrim=0:${INTRO_STING},asetpts=PTS-STARTPTS[sting];` +
+          `[mb]atrim=${INTRO_STING}:${INTRO_STING + INTRO_FADE},asetpts=PTS-STARTPTS,` +
+            `afade=t=out:st=0:d=${INTRO_FADE}[fade];` +
+          `[1:a][fade]amix=inputs=2:duration=longest[mix];` +
           `[sting][mix]concat=n=2:v=0:a=1[out]`,
         '-map', '[out]', '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', introOut
       ]);
 
-      // Outro section: ducked bed under outro speech → 4s sting → fade out
+      // Outro: ducked bed under speech → 15s trail at full vol → 3s fade out
       const outroOut = path.join(tmpDir, 'outro.mp3');
       await execFileAsync('ffmpeg', [
         '-stream_loop', '-1', '-i', musicFile, '-i', outroFile,
@@ -289,9 +291,9 @@ async function mixWithFfmpeg(speechBuffers) {
           `[0:a]asplit=2[mb][ms];` +
           `[mb]atrim=0:${outroDur},asetpts=PTS-STARTPTS,volume=${BED}[bed];` +
           `[bed][1:a]amix=inputs=2:duration=longest[mix];` +
-          `[ms]atrim=${outroDur}:${outroDur + STING + FADE},asetpts=PTS-STARTPTS,` +
-            `afade=t=in:d=0.5,afade=t=out:st=${STING}:d=${FADE}[sting];` +
-          `[mix][sting]concat=n=2:v=0:a=1[out]`,
+          `[ms]atrim=${outroDur}:${outroDur + OUTRO_TRAIL},asetpts=PTS-STARTPTS,` +
+            `afade=t=in:d=0.5,afade=t=out:st=${OUTRO_TRAIL - OUTRO_FADE}:d=${OUTRO_FADE}[trail];` +
+          `[mix][trail]concat=n=2:v=0:a=1[out]`,
         '-map', '[out]', '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', outroOut
       ]);
 
