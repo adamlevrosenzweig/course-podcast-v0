@@ -215,6 +215,23 @@ function parseDialogue(script) {
   return turns.filter(t => t.text.length > 0);
 }
 
+// Splits dialogue turns into chunks that stay under the ElevenLabs per-call char limit.
+function chunkTurns(turns, maxChars = 5000) {
+  const chunks = [];
+  let current = [], len = 0;
+  for (const t of turns) {
+    if (len + t.text.length > maxChars && current.length > 0) {
+      chunks.push(current);
+      current = [];
+      len = 0;
+    }
+    current.push(t);
+    len += t.text.length;
+  }
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
+
 // ─── AUDIO HELPERS ────────────────────────────────────────────────────────────
 
 async function generateTurnAudio(text, voiceId, voiceSettings) {
@@ -258,57 +275,42 @@ async function mixWithFfmpeg(speechBuffers) {
     const outputFile = path.join(tmpDir, 'output.mp3');
     const listFile = path.join(tmpDir, 'list.txt');
 
-    if (musicExists && turnFiles.length >= 2) {
-      const INTRO_STING  = 6;   // seconds of solo music before speech starts
-      const INTRO_FADE   = 6;   // seconds for music to fade under intro speech
-      const OUTRO_TRAIL  = 15;  // seconds of music after outro speech ends
-      const OUTRO_FADE   = 3;   // fade-out duration at end of outro trail
-      const BED          = 0.15; // music volume under outro speech
+    if (musicExists && turnFiles.length === 1) {
+      // Single-stream path (dialogue API or monologue): 6s sting → fading intro → speech → 15s trail
+      const INTRO_STING = 6;
+      const INTRO_FADE  = 6;
+      const OUTRO_TRAIL = 15;
+      const OUTRO_FADE  = 3;
 
-      const introFile = turnFiles[0];
-      const outroFile = turnFiles[turnFiles.length - 1];
-      const bodyFiles = turnFiles.slice(1, -1);
-
-      const outroDur = await getAudioDuration(outroFile);
-
-      // Intro: adelay shifts speech right by INTRO_STING seconds so the sting plays
-      // alone first. Speech is listed first in amix with duration=first so the output
-      // ends when speech ends, not when the shorter music stream ends.
-      const introOut = path.join(tmpDir, 'intro.mp3');
+      // Mix speech with intro sting using adelay (speech listed first → duration=first keeps full speech)
+      const speechOut = path.join(tmpDir, 'speech-with-sting.mp3');
       await execFileAsync(ffmpegBin, [
-        '-stream_loop', '-1', '-i', musicFile, '-i', introFile,
+        '-stream_loop', '-1', '-i', musicFile, '-i', turnFiles[0],
         '-filter_complex',
           `[1:a]adelay=${INTRO_STING * 1000}|${INTRO_STING * 1000}[speech];` +
           `[0:a]atrim=0:${INTRO_STING + INTRO_FADE},asetpts=PTS-STARTPTS,` +
             `afade=t=out:st=${INTRO_STING}:d=${INTRO_FADE}[music];` +
           `[speech][music]amix=inputs=2:duration=first:normalize=0[out]`,
-        '-map', '[out]', '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', introOut
+        '-map', '[out]', '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', speechOut
       ]);
 
-      // Outro: ducked bed under speech → 15s trail at full vol → 3s fade out
-      const outroOut = path.join(tmpDir, 'outro.mp3');
+      // Generate outro music trail
+      const trailOut = path.join(tmpDir, 'trail.mp3');
       await execFileAsync(ffmpegBin, [
-        '-stream_loop', '-1', '-i', musicFile, '-i', outroFile,
-        '-filter_complex',
-          `[0:a]asplit=2[mb][ms];` +
-          `[mb]atrim=0:${outroDur},asetpts=PTS-STARTPTS,volume=${BED}[bed];` +
-          `[1:a][bed]amix=inputs=2:duration=first:normalize=0[mix];` +
-          `[ms]atrim=${outroDur}:${outroDur + OUTRO_TRAIL},asetpts=PTS-STARTPTS,` +
-            `afade=t=in:d=0.5,afade=t=out:st=${OUTRO_TRAIL - OUTRO_FADE}:d=${OUTRO_FADE}[trail];` +
-          `[mix][trail]concat=n=2:v=0:a=1[out]`,
-        '-map', '[out]', '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', outroOut
+        '-stream_loop', '-1', '-i', musicFile,
+        '-t', String(OUTRO_TRAIL),
+        '-af', `afade=t=in:d=0.5,afade=t=out:st=${OUTRO_TRAIL - OUTRO_FADE}:d=${OUTRO_FADE}`,
+        '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', trailOut
       ]);
 
-      // Assemble: intro + body turns + outro, then loudnorm
-      const parts = [introOut, ...bodyFiles, outroOut];
-      fs.writeFileSync(listFile, parts.map(f => `file '${f}'`).join('\n'));
+      fs.writeFileSync(listFile, [speechOut, trailOut].map(f => `file '${f}'`).join('\n'));
       await execFileAsync(ffmpegBin, [
         '-f', 'concat', '-safe', '0', '-i', listFile,
         '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
         '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', outputFile
       ]);
     } else {
-      // No music or single-turn: concat + loudnorm only
+      // No music (or multi-turn fallback): concat + loudnorm only
       fs.writeFileSync(listFile, turnFiles.map(f => `file '${f}'`).join('\n'));
       await execFileAsync(ffmpegBin, [
         '-f', 'concat', '-safe', '0', '-i', listFile,
@@ -323,7 +325,7 @@ async function mixWithFfmpeg(speechBuffers) {
     return Buffer.concat(speechBuffers.map(b => stripMp3Headers(b)));
   } finally {
     for (const f of turnFiles) { try { fs.unlinkSync(f); } catch {} }
-    for (const n of ['list.txt', 'intro.mp3', 'outro.mp3', 'output.mp3']) {
+    for (const n of ['list.txt', 'speech-with-sting.mp3', 'trail.mp3', 'intro.mp3', 'outro.mp3', 'output.mp3']) {
       try { fs.unlinkSync(path.join(tmpDir, n)); } catch {}
     }
     try { fs.rmdirSync(tmpDir); } catch {}
@@ -1104,23 +1106,36 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
       let audioData;
 
       if (freshEpisode.episode_type === 'dialogue' && ELEVENLABS_ADAM_VOICE_ID) {
-        // ── Per-speaker TTS: one eleven_turbo_v2_5 call per turn, then ffmpeg mix ──
+        // ── text-to-dialogue: eleven_v3, natural multi-speaker prosody ──────────
         const turns = parseDialogue(freshEpisode.script);
         if (turns.length === 0) throw new Error('No dialogue turns found in script');
-        console.log(`[audio] ${turns.length} turn(s) for episode ${freshEpisode.number}`);
+        const chunks = chunkTurns(turns);
+        console.log(`[audio] ${turns.length} turns in ${chunks.length} chunk(s) for episode ${freshEpisode.number}`);
 
-        const turnBuffers = [];
-        for (let i = 0; i < turns.length; i++) {
-          job.step = `Generating voice ${i + 1}/${turns.length}...`;
-          const voiceId = turns[i].speaker === 'ADAM' ? ELEVENLABS_ADAM_VOICE_ID : ELEVENLABS_VOICE_ID;
-          const voiceSettings = turns[i].speaker === 'ADAM'
-            ? { stability: 0.50, similarity_boost: 0.75, style: 0.30, use_speaker_boost: true }
-            : { stability: 0.50, similarity_boost: 0.75, style: 0.20, use_speaker_boost: true };
-          turnBuffers.push(await generateTurnAudio(turns[i].text, voiceId, voiceSettings));
+        const chunkBuffers = [];
+        for (let i = 0; i < chunks.length; i++) {
+          job.step = `Generating audio chunk ${i + 1}/${chunks.length}...`;
+          const response = await axios.post(
+            'https://api.elevenlabs.io/v1/text-to-dialogue',
+            {
+              model_id: 'eleven_v3',
+              output_format: 'mp3_44100_128',
+              inputs: chunks[i].map(t => ({
+                text: t.text,
+                voice_id: t.speaker === 'ADAM' ? ELEVENLABS_ADAM_VOICE_ID : ELEVENLABS_VOICE_ID,
+                voice_settings: t.speaker === 'ADAM'
+                  ? { stability: 0.50, similarity_boost: 0.75, style: 0.30, use_speaker_boost: true }
+                  : { stability: 0.50, similarity_boost: 0.75, style: 0.20, use_speaker_boost: true }
+              }))
+            },
+            { headers: { 'xi-api-key': ELEVENLABS_API_KEY }, responseType: 'arraybuffer', timeout: 300000 }
+          );
+          chunkBuffers.push(stripMp3Headers(Buffer.from(response.data)));
         }
 
         job.step = 'Mixing audio...';
-        audioData = await mixWithFfmpeg(turnBuffers);
+        const dialogueBuffer = chunkBuffers.length === 1 ? chunkBuffers[0] : Buffer.concat(chunkBuffers);
+        audioData = await mixWithFfmpeg([dialogueBuffer]);
       } else {
         // ── Single-voice monologue: one text-to-speech call ──────────────────
         const response = await axios.post(

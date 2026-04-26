@@ -135,19 +135,19 @@ Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by se
 
 ## Audio generation
 
-- **Dialogue:** one `text-to-speech` call per turn (`eleven_turbo_v2_5`), then ffmpeg concat + loudnorm. Old `text-to-dialogue` / `eleven_v3` path removed.
-- **Monologue:** single `text-to-speech` call, also routed through ffmpeg loudnorm for consistent volume.
-- ffmpeg installed via `nixpacks.toml` (`nixPkgs = ["ffmpeg"]`). Falls back to raw buffer concat if ffmpeg unavailable.
-- **Music:** set `MUSIC_FILE` env var (path to an MP3 on disk) to enable music. Produces: 4s solo sting → ducked bed (15% vol) under intro speech → episode body → ducked bed under outro speech → 4s solo sting → fade out. Omit to skip music entirely.
+- **Dialogue:** `text-to-dialogue` API (`eleven_v3`), chunked into ≤5000-char groups via `chunkTurns()`. Returns natural multi-speaker audio. Chunk buffers merged into one stream, then passed to `mixWithFfmpeg`.
+- **Monologue:** single `text-to-speech` call (`eleven_turbo_v2_5`), passed as single-element array to `mixWithFfmpeg`.
+- ffmpeg installed via `ffmpeg-static` npm package (bundles its own binary — no system package needed).
+- **Music:** set `MUSIC_FILE` env var (defaults to `sounds/music.mp3` in repo root) to enable music. Single-stream path (both dialogue and monologue): 6s solo sting → music fades under speech over 6s → full speech → 15s music trail → 3s fade out. Omit `MUSIC_FILE` and remove `sounds/music.mp3` to skip music entirely.
 - Audio jobs are in-memory; server restart clears them (Railway restarts on deploy)
 - New audio POST cancels any running job for that episode
 - Episode re-read from DB right before calling ElevenLabs (uses latest saved script)
 - Audio served with `Cache-Control: no-cache`; Queue player appends `?v=timestamp` on completion
 
-### Voice settings (per-speaker TTS)
+### Voice settings (text-to-dialogue)
 - **Megan voice_settings:** `{ stability: 0.50, similarity_boost: 0.75, style: 0.20, use_speaker_boost: true }`
 - **Adam voice_settings:** `{ stability: 0.50, similarity_boost: 0.75, style: 0.30, use_speaker_boost: true }`
-- Model: `eleven_turbo_v2_5` for both speakers — handles accents cleanly (no eleven_v3 accent normalization issue)
+- Model: `eleven_v3` (required by text-to-dialogue endpoint) — British Megan voice renders cleanly; do not use non-British/American voices
 - **Do not add `language_code`** — `en-IE` was tried and reverted; it degraded quality
 - `audio_duration_seconds` calculated as `audioBuffer.length / 16000` (CBR 128 kbps = 16000 bytes/sec) at audio generation time; RSS falls back to same calculation from file size, then `duration_estimate * 60`
 - `<itunes:duration>` formatted as `M:SS` or `H:MM:SS` via `toHMS()` helper in the feed route
