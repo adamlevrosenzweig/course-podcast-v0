@@ -277,14 +277,14 @@ async function mixWithFfmpeg(speechBuffers) {
 
     if (musicExists && turnFiles.length === 1) {
       // Single-stream path (dialogue API or monologue):
-      //   [6s solo sting] → [30s music fading under speech] → [speech only] → [15s trail]
+      //   [6s solo sting] → [6s music fading under speech] → [speech only] → [15s trail]
       //
       // Strategy: prepend 6s of silence to the speech so the delayed-speech file has a
       // known, ffprobe-reported duration. Then use apad=whole_dur to extend the music to
       // exactly that duration. amix duration=first (=delayed speech) is then unambiguous.
       // No speech splitting, no atrim-seeking, no internal filter_complex concat.
       const INTRO_STING = 6;   // seconds of solo music before speech starts
-      const INTRO_FADE  = 30;  // seconds for music to fade under speech
+      const INTRO_FADE  = 6;   // seconds for music to fade under speech
       const OUTRO_TRAIL = 15;  // seconds of music after speech ends
       const OUTRO_FADE  = 3;
 
