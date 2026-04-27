@@ -277,39 +277,46 @@ async function mixWithFfmpeg(speechBuffers) {
 
     if (musicExists && turnFiles.length === 1) {
       // Single-stream path (dialogue API or monologue):
-      //   [solo sting] → [speech + fading music] → [speech only] → [outro trail]
+      //   [6s solo sting] → [30s music fading under speech] → [speech only] → [15s trail]
       //
-      // All segments have fixed, known durations via atrim — avoids adelay duration
-      // metadata issues that caused the last N seconds of speech to be truncated.
+      // Strategy: prepend 6s of silence to the speech so the delayed-speech file has a
+      // known, ffprobe-reported duration. Then use apad=whole_dur to extend the music to
+      // exactly that duration. amix duration=first (=delayed speech) is then unambiguous.
+      // No speech splitting, no atrim-seeking, no internal filter_complex concat.
       const INTRO_STING = 6;   // seconds of solo music before speech starts
-      const INTRO_FADE  = 30;  // seconds for music to fade out under speech
+      const INTRO_FADE  = 30;  // seconds for music to fade under speech
       const OUTRO_TRAIL = 15;  // seconds of music after speech ends
-      const OUTRO_FADE  = 3;   // fade-out at end of outro trail
+      const OUTRO_FADE  = 3;
 
-      // Step 1: Build the intro block (sting + fade overlay).
-      //   [sting]    = INTRO_STING s of music at full volume
-      //   [fade_mix] = INTRO_FADE s of speech mixed with INTRO_FADE s of fading music
-      //   Both trimmed to known lengths → internal concat is safe
-      const stingAndMix = path.join(tmpDir, 'sting-and-mix.mp3');
+      const speechDur  = await getAudioDuration(turnFiles[0]);
+      const totalDur   = INTRO_STING + speechDur;  // duration of delayed-speech file
+
+      // Step 1: 6s silence → concat with speech → delayed-speech.mp3 (known duration)
+      const silenceFile = path.join(tmpDir, 'silence.mp3');
       await execFileAsync(ffmpegBin, [
-        '-stream_loop', '-1', '-i', musicFile, '-i', turnFiles[0],
-        '-filter_complex',
-          `[0:a]asplit=2[m1][m2];` +
-          `[m1]atrim=0:${INTRO_STING},asetpts=PTS-STARTPTS[sting];` +
-          `[m2]atrim=${INTRO_STING}:${INTRO_STING + INTRO_FADE},asetpts=PTS-STARTPTS,` +
-            `afade=t=out:st=0:d=${INTRO_FADE}[music_fade];` +
-          `[1:a]atrim=0:${INTRO_FADE},asetpts=PTS-STARTPTS[speech_start];` +
-          `[speech_start][music_fade]amix=inputs=2:duration=first:normalize=0[fade_mix];` +
-          `[sting][fade_mix]concat=n=2:v=0:a=1[out]`,
-        '-map', '[out]', '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', stingAndMix
+        '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo',
+        '-t', String(INTRO_STING), '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', silenceFile
+      ]);
+      const delayedList = path.join(tmpDir, 'delayed-list.txt');
+      fs.writeFileSync(delayedList, `file '${silenceFile}'\nfile '${turnFiles[0]}'`);
+      const delayedSpeech = path.join(tmpDir, 'delayed-speech.mp3');
+      await execFileAsync(ffmpegBin, [
+        '-f', 'concat', '-safe', '0', '-i', delayedList, '-codec:a', 'copy', '-y', delayedSpeech
       ]);
 
-      // Step 2: Rest of speech (after the intro fade is done — no music here).
-      const speechTail = path.join(tmpDir, 'speech-tail.mp3');
+      // Step 2: Mix delayed speech with intro music.
+      //   Music: trim to STING+FADE seconds, fade from full→0 starting at STING,
+      //   then pad with silence to totalDur so amix sees equal-length inputs.
+      //   Speech (first input) → duration=first → output = totalDur = full episode.
+      const mixedOut = path.join(tmpDir, 'mixed.mp3');
       await execFileAsync(ffmpegBin, [
-        '-i', turnFiles[0],
-        '-af', `atrim=start=${INTRO_FADE},asetpts=PTS-STARTPTS`,
-        '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', speechTail
+        '-stream_loop', '-1', '-i', musicFile, '-i', delayedSpeech,
+        '-filter_complex',
+          `[0:a]atrim=0:${INTRO_STING + INTRO_FADE},asetpts=PTS-STARTPTS,` +
+            `afade=t=out:st=${INTRO_STING}:d=${INTRO_FADE},` +
+            `apad=whole_dur=${totalDur}[music];` +
+          `[1:a][music]amix=inputs=2:duration=first:normalize=0[out]`,
+        '-map', '[out]', '-codec:a', 'libmp3lame', '-b:a', '128k', '-y', mixedOut
       ]);
 
       // Step 3: Outro trail.
@@ -322,7 +329,7 @@ async function mixWithFfmpeg(speechBuffers) {
       ]);
 
       // Step 4: Final concat + loudnorm.
-      fs.writeFileSync(listFile, [stingAndMix, speechTail, trailOut].map(f => `file '${f}'`).join('\n'));
+      fs.writeFileSync(listFile, [mixedOut, trailOut].map(f => `file '${f}'`).join('\n'));
       await execFileAsync(ffmpegBin, [
         '-f', 'concat', '-safe', '0', '-i', listFile,
         '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
@@ -344,7 +351,7 @@ async function mixWithFfmpeg(speechBuffers) {
     return Buffer.concat(speechBuffers.map(b => stripMp3Headers(b)));
   } finally {
     for (const f of turnFiles) { try { fs.unlinkSync(f); } catch {} }
-    for (const n of ['list.txt', 'sting-and-mix.mp3', 'speech-tail.mp3', 'trail.mp3', 'intro.mp3', 'outro.mp3', 'output.mp3']) {
+    for (const n of ['list.txt', 'silence.mp3', 'delayed-list.txt', 'delayed-speech.mp3', 'mixed.mp3', 'trail.mp3', 'intro.mp3', 'outro.mp3', 'output.mp3']) {
       try { fs.unlinkSync(path.join(tmpDir, n)); } catch {}
     }
     try { fs.rmdirSync(tmpDir); } catch {}
