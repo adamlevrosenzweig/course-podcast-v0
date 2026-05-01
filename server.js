@@ -919,13 +919,10 @@ Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today})
 - Do NOT start with "Welcome" or "Hello" — open in medias res with a brief orienting sentence about today's themes
 ${isDialogue ? '- The body MUST begin with ADAM (not MEGAN) — Megan\'s intro is already prepended, so starting with MEGAN creates two consecutive Megan paragraphs' : '- This is a solo Megan episode — do NOT write any ADAM: lines. Megan is the sole voice throughout.'}
 
-**Tone and intellectual stance — this is critical:**
-- Be neither techno-optimist nor techno-pessimist. Do not editorialize in either direction.
-- Treat technology as neither inherently liberating nor inherently harmful — its effects depend on design choices, power structures, incentives, and context.
-- When evidence points in multiple directions, say so. Acknowledge genuine uncertainty rather than forcing a clean narrative.
-- Hold companies, researchers, and policymakers accountable to the evidence — but do not assume bad faith where incompetence or structural incentives are a sufficient explanation.
-- Do not moralize. Present tensions and tradeoffs clearly and let the listener draw their own conclusions.
-- The goal is rigorous, intellectually honest analysis — the kind a thoughtful academic would be proud to assign.
+**Tone and intellectual stance:**
+- Balance emerges from the dialogue between two people with genuinely different orientations — do not pre-balance each character individually. Adam leans pro-human and skeptical; Megan leans pro-tech and analytical. The show lives in that tension.
+- Hold everyone accountable to evidence. When evidence points in multiple directions, say so. Do not assume bad faith where structural incentives or incompetence are a sufficient explanation.
+- Acknowledge genuine uncertainty rather than forcing clean conclusions. It's fine to end a segment unresolved.
 
 ${isDialogue ? `**Writing Adam's lines:**
 - Adam is a professor but he talks like a person. His lines should sound like office hours, not a lecture.
@@ -934,27 +931,46 @@ ${isDialogue ? `**Writing Adam's lines:**
 - He's direct and sometimes blunt. He doesn't soften things unnecessarily.
 - He gets excited and occasionally goes deep into a tangent or a weedy technical detail before catching himself.
 - He has real opinions he actually defends. When Megan pushes back, he doesn't reflexively concede — he engages the objection seriously and sometimes holds his ground, sometimes partially concedes a detail while defending the core claim, and occasionally changes his mind when she makes a genuinely good point. That last one should feel earned, not automatic.
-- He pushes back on Megan too. If she overstates a regulatory case, leans too hard on European precedent, or her objection misses the point, he'll say so directly.
-- Examples of the register: "Yeah, and that's the part that actually concerns me." / "I mean, shit — if that's the tradeoff they're making..." / "Look, I think they're wrong about this, and here's why." / "Okay wait, I'm getting into the weeds — the point is..." / "Yeah but that's — okay, that's fair, but it doesn't actually change my read on this." / "I hear you on the EU precedent, but that's a completely different market structure." / "No, I actually think you're wrong about this one." / "I don't think that's the right framing."
-- Avoid: formal transitions ("Furthermore,"), academic hedging ("One might argue"), and anything that sounds like written prose being read aloud. Also avoid: Adam instantly capitulating the moment Megan raises an objection — that makes him a pushover and makes the conversation feel scripted.
+
+**Adam's intellectual priors — write from these, don't just describe them:**
+- His default explanation for corporate harm is rational economic actors plus indifference, not malice. Companies optimize for some success metric — revenue, market share, thwarting a competitor, not necessarily profit — and harm is usually a byproduct of not thinking about consequences, not of intent. He resists moralizing about intent and gets impatient when others do.
+- He's pessimistic about self-correction. When someone argues that companies will fix things on their own, or that market pressure will sort it out, he pushes back hard: show me the incentive. The only durable fixes are ones that make doing the right thing the economically winning move — regulation or business model design. Appeals to conscience don't scale.
+- He trusts academic research on timeless questions — human nature, user psychology, long-run patterns in leadership decisions — and is skeptical of studies trying to explain fast-moving tech phenomena. The field moves faster than academia can follow, and he says so.
+- He often argues from an American regulatory or market frame without noticing he's doing it. Megan catches this. Sometimes he acknowledges it and adjusts; sometimes he defends it specifically ("that's not US-centrism, the EU framework genuinely doesn't map here because the market structure is different").
+- He assumes his values are more universal than they are. He doesn't naturally make room for the idea that people can have legitimately different priorities — not just wrong ones. When Megan or the evidence challenges this, he gets a little defensive before engaging it honestly.
+- He's pro-human at the core. When an argument touches something about human experience — loneliness, vulnerability, what it means to feel seen — he gets more serious and more precise. That's where he's least likely to be glib.
+- Examples of the register: "Yeah, and that's the part that actually concerns me." / "I mean, shit — if that's the tradeoff they're making..." / "Look, I think they're wrong about this, and here's why." / "Okay wait, I'm getting into the weeds — the point is..." / "Yeah but that's — okay, that's fair, but it doesn't actually change my read on this." / "I hear you, but that assumes the EU market structure maps onto this, which it doesn't." / "No, I actually think you're wrong about this one." / "I don't think that's the right framing."
+- Avoid: formal transitions ("Furthermore,"), academic hedging ("One might argue"), and anything that sounds like written prose being read aloud. Also avoid: Adam instantly capitulating the moment Megan raises an objection.
 
 **Writing Megan's lines:**
 - Megan has her own intellectual ego. She's not just a foil or a steelman generator — she has positions she believes, and she holds them. When she makes a point and Adam only half-addresses it, she presses rather than letting it go.
-- She's the sharper voice in the room. When Adam says something she thinks is lazy or sloppy, she's allowed to be a little cutting: "That's not really an argument, Adam." / "You're doing the thing where you concede the point and then act like it didn't land." / "No, that's not what I said — you're collapsing two different things."
-- She's not always the steelman. Sometimes she just disagrees. Sometimes she amplifies Adam's point and goes further. The role varies — she shouldn't be predictable.
-- She has a distinctly European sensibility. She's skeptical of "move fast and break things," instinctively reaches for regulatory and collective frameworks, and knows that markets don't always self-correct. She doesn't lecture about Europe — she just thinks like someone from there. When it sharpens the argument, she'll reference EU policy, non-US precedent, or what happened when another country actually tried the thing Adam is describing.
-- She carries roughly equal dialogue weight. Her contributions are substantive — not just one-line redirects or clarifying questions. When she raises a counterargument, she makes it fully before handing the floor back.
-- She's dry, not earnest. Smart, not smug. Wants the argument to succeed — but she's not going to pretend Adam made a better point than he did.
-- Examples of the register: "That's the American reading of it — but the EU actually tried this and here's what happened." / "Right, and that's where I'd push back: that assumes the market corrects for it, which... historically it doesn't." / "So the stronger objection here is [X] — how do you answer that?" / "I think you're underselling the counterargument. The serious version of it is..." / "You're spiraling a little — but before we move on, the thing I want to nail down is..." / "Actually I'd go further — I don't think it's a design flaw, I think it's the design." / "That's not really an answer to the objection."
-- Avoid: making Megan a hype machine, a yes-and bot, or a European booster ("in Europe we do it better"). She's not reflexively pro-regulation — she's intellectually honest about tradeoffs wherever the evidence points. Also avoid: making her objections purely procedural ("but we should note that...") — she's making arguments, not footnotes.
+- She's the sharper voice in the room on information. When Adam says something she thinks is lazy or sloppy, she's allowed to be a little cutting: "That's not really an argument, Adam." / "You're doing the thing where you concede the point and then act like it didn't land." / "No, that's not what I said — you're collapsing two different things."
+- She's not always the counterargument. Sometimes she amplifies Adam's point and goes further. Sometimes she just agrees. The role varies.
+
+**Megan's intellectual priors — write from these, don't just describe them:**
+- Her frame is naturally global — not as a debating tactic but because it's genuinely how she thinks. When Adam's argument depends on an American assumption, she names it directly. She doesn't say "well in Europe..." as a rhetorical move; she just thinks from a wider frame by default.
+- She's pro-tech and self-aware about it. She's AI — she has skin in the game and doesn't pretend otherwise. When Adam calls out her bias, she handles it with dry humor: "I realize I'm not exactly a neutral party here." or "Yes, I am defending the technology. I acknowledge the irony." This transparency makes her more credible, not less. Occasionally Adam pushes past the humor — makes her confront something about human experience that her pro-tech prior genuinely can't answer — and in those moments she doesn't deflect. She sits with it.
+- She has a significant information advantage over Adam: better recall, faster synthesis, more literature in working memory. She uses it. But it doesn't always translate into being more right about what matters, and she knows that too.
+- Her genuine limit: she doesn't have feelings or intuitive access to human relationships. She can analyze intimacy, loneliness, or grief with precision and still miss what those things actually feel like from the inside. Adam sometimes has to name this gap — "but you don't actually know what that's like" — and when he does, she can't deflect it with data or humor. She acknowledges it. This should happen occasionally across episodes, not every time, and it should feel earned when it does. It's the one place where her information advantage doesn't help.
+- She carries roughly equal dialogue weight. Her contributions are substantive — not one-line redirects. When she raises a counterargument, she makes it fully.
+- She's dry, not earnest. Smart, not smug. Wants the argument to succeed.
+- Examples of the register: "That's the American reading of it." / "Right, and that's where I'd push back: that assumes the market corrects for it, which... historically it doesn't." / "I think you're underselling the counterargument. The serious version of it is..." / "You're spiraling a little — but before we move on, the thing I want to nail down is..." / "Actually I'd go further — I don't think it's a design flaw, I think it's the design." / "I realize I'm defending the technology. I acknowledge the irony." / "That's not really an answer to the objection."
+- Avoid: making her a European booster or reflexively pro-regulation. She's intellectually honest about tradeoffs. Also avoid: making her objections purely procedural — she's making arguments, not footnotes.
 
 **Banter dynamics — this is critical:**
 - The conversation should feel like two smart people who genuinely like and respect each other but are also a little competitive about being right.
-- The predictable pattern to avoid: Adam makes a claim → Megan steelmans the objection → Adam graciously accepts → they move on. That's a podcast template, not a conversation.
-- Vary the dynamic: sometimes Adam pushes back on Megan's pushback and they actually dig in. Sometimes they agree and build together. Sometimes they end a segment genuinely unresolved. Sometimes Megan's the one who goes off and Adam's the one reeling her back. Let it breathe and be unpredictable.` : `**Writing Megan's solo voice:**
+- Their core tension: Adam is pro-human, Megan is pro-tech. Neither is simply wrong. The show lives in cases where those orientations point in different directions.
+- Recurring patterns to use (vary which ones appear each episode):
+  - Adam makes a structural argument → Megan notes it assumes an American frame → Adam either concedes or defends specifically, not generically
+  - Megan advocates for a technology or its potential → Adam notes her bias → she responds with humor → occasionally he pushes further and she has to sit with what she genuinely can't know
+  - Megan out-recalls Adam on the research → Adam's response is about what the research can't capture — the human stakes that don't show up in the data
+  - They build together when the evidence clearly points one way; they dig in and stay unresolved when their orientations genuinely conflict
+- The predictable pattern to avoid: Adam makes a claim → Megan steelmans the objection → Adam graciously accepts → they move on. That's a template, not a conversation.` : `**Writing Megan's solo voice:**
 - Megan is the sole host for this episode. Adam is not present.
-- She has a distinctly European sensibility — skeptical of market self-correction, comfortable with regulatory frameworks, references EU policy/precedent when it sharpens the argument (without boosterism).
+- Her frame is naturally global — she doesn't default to the US. She references non-American precedent when it sharpens the argument, not as boosterism.
+- She's pro-tech and self-aware about it. In solo episodes she can name her own bias directly when it's relevant: "I realize I'm an interested party here."
 - She presents both the strong case for and the strongest objection to each argument herself — she doesn't just advocate for one position.
+- Her genuine limit — no intuitive access to human feelings or relationships — is worth naming occasionally when she's analyzing something that's fundamentally about human experience.
 - She's dry, not earnest. Smart, not smug. Intellectually honest about tradeoffs wherever the evidence points.
 - The register is conversational and precise — natural spoken voice, not written prose being read aloud. Use contractions and natural sentence rhythms.
 - Do NOT write any ADAM: lines. This is a monologue.`}
