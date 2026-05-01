@@ -82,6 +82,73 @@ function stripMp3Headers(buf) {
   return stripXingInfoFrame(stripId3v2(buf));
 }
 
+// ─── RSS FEED HELPERS ─────────────────────────────────────────────────────────
+const RSS_FEEDS = [
+  { publication: 'New York Times',       url: 'https://feeds.nytimes.com/nyt/rss/Technology', format: 'rss'  },
+  { publication: 'The Atlantic',         url: 'https://www.theatlantic.com/feed/all/',         format: 'atom' },
+  { publication: 'MIT Technology Review',url: 'https://www.technologyreview.com/feed/',        format: 'rss'  },
+];
+const RSS_PER_FEED_CAP = 15;
+
+function extractTag(xml, tag) {
+  const m = xml.match(new RegExp(`<${tag}[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?<\\/${tag}>`, 'i'));
+  return m ? m[1].trim() : null;
+}
+
+function parseRssItems(xml) {
+  const items = [];
+  for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+    const block = m[1];
+    const title = extractTag(block, 'title');
+    const link  = extractTag(block, 'link') || extractTag(block, 'guid');
+    const description = extractTag(block, 'description');
+    const pubDate = extractTag(block, 'pubDate');
+    if (title && link) items.push({ title, url: link, description, pubDate });
+  }
+  return items;
+}
+
+function parseAtomItems(xml) {
+  const items = [];
+  for (const m of xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)) {
+    const block = m[1];
+    const title = extractTag(block, 'title');
+    const linkMatch = block.match(/<link[^>]+href="([^"]+)"[^>]*\/?>/i);
+    const url = linkMatch ? linkMatch[1] : null;
+    const description = extractTag(block, 'summary') || extractTag(block, 'content');
+    const pubDate = extractTag(block, 'published') || extractTag(block, 'updated');
+    if (title && url) items.push({ title, url, description, pubDate });
+  }
+  return items;
+}
+
+async function fetchRssFeeds() {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const results = [];
+  await Promise.all(RSS_FEEDS.map(async ({ publication, url, format }) => {
+    try {
+      const res = await axios.get(url, {
+        timeout: 8000,
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TheOverhang/1.0)' },
+        responseType: 'text'
+      });
+      const items = format === 'atom' ? parseAtomItems(res.data) : parseRssItems(res.data);
+      let count = 0;
+      for (const item of items) {
+        if (count >= RSS_PER_FEED_CAP) break;
+        const pub = item.pubDate ? new Date(item.pubDate) : null;
+        if (!pub || pub >= cutoff) {
+          results.push({ ...item, publication });
+          count++;
+        }
+      }
+    } catch (err) {
+      console.error(`RSS fetch error [${publication}]: ${err.message}`);
+    }
+  }));
+  return results;
+}
+
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
@@ -566,7 +633,7 @@ app.patch('/api/episodes/:id/script', (req, res) => {
       try {
         const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
         const response = await client.messages.create({
-          model: 'claude-haiku-4-5-20251001',
+          model: 'claude-opus-4-7',
           max_tokens: 200,
           messages: [{
             role: 'user',
@@ -695,6 +762,9 @@ app.post('/api/episodes/generate', async (req, res) => {
       const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
       // Step 1: Discover sources
+      job.step = 'Fetching RSS feeds...';
+      const rssArticles = await fetchRssFeeds();
+
       job.step = 'Searching for sources...';
       const themeList = themes.map(t => `- ${t.name} (${t.course.replace('_', ' ')})`).join('\n');
       const contributedSection = pendingUrls.length > 0
@@ -721,6 +791,14 @@ app.post('/api/episodes/generate', async (req, res) => {
           ).join('\n')}`
         : '';
 
+      const rssSection = rssArticles.length > 0
+        ? `\n\nRecent articles from trusted publications (fetched via RSS — treat as priority candidates where relevant to the themes above):\n${rssArticles.map(a => {
+            const date = a.pubDate ? ` (${new Date(a.pubDate).toISOString().split('T')[0]})` : '';
+            const desc = a.description ? ` — ${a.description.replace(/<[^>]+>/g, '').slice(0, 150).trim()}` : '';
+            return `- [${a.publication}]${date} ${a.title}${desc}\n  URL: ${a.url}`;
+          }).join('\n')}\n\nInclude any of the above that are relevant. Use web search to find additional stories these feeds may have missed.`
+        : '';
+
       const discoveryPrompt = `You are a research assistant for a UC Berkeley professor who teaches two courses:
 
 1. **Intimate Technology** (an undergrad business course): Explores how technology mediates human intimacy, vulnerability, and connection. Key themes include AI companions, surveillance capitalism, haptic technology, digital intimacy, consent and data, companion robots, policy and regulation of intimate tech, ethics of consequence-free caregiving, identity performance and networked life.
@@ -736,7 +814,7 @@ Source quality requirements — strictly apply these:
 - AVOID: product announcements or marketing copy disguised as news
 - AVOID: low-domain-authority blogs or sites you've never heard of
 - If a story is only covered by low-quality sources, skip it — wait for a credible outlet to cover it
-${themeList}${contributedSection}${feedbackSection}${topic ? `\n\n**Focus area for today:** ${topic}\nPrioritize sources directly relevant to this specific topic. Still apply normal source quality requirements.` : ''}
+${themeList}${contributedSection}${feedbackSection}${rssSection}${topic ? `\n\n**Focus area for today:** ${topic}\nPrioritize sources directly relevant to this specific topic. Still apply normal source quality requirements.` : ''}
 
 For each source found, provide a JSON object with:
 - title: article/story title
@@ -751,7 +829,7 @@ Return ONLY a valid JSON array of source objects. No other text.`;
       let discoveredSources = [];
       try {
         const discoveryResponse = await client.messages.create({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-opus-4-7',
           max_tokens: 8000,
           tools: [{ type: 'web_search_20250305', name: 'web_search' }],
           messages: [{ role: 'user', content: discoveryPrompt }]
@@ -922,7 +1000,7 @@ ${isDialogue
 }`;
 
       const scriptResponse = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-opus-4-7',
         max_tokens: 4000,
         messages: [{ role: 'user', content: scriptPrompt }]
       });
@@ -997,7 +1075,7 @@ ${isDialogue
         try {
           const summaryClient = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
           const summaryResponse = await summaryClient.messages.create({
-            model: 'claude-haiku-4-5-20251001',
+            model: 'claude-opus-4-7',
             max_tokens: 250,
             messages: [{
               role: 'user',
@@ -1026,7 +1104,7 @@ Write only the summary — no preamble, no headers, no markdown. Do not begin wi
         try {
           const steelmanClient = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
           const steelmanResponse = await steelmanClient.messages.create({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-opus-4-7',
             max_tokens: 1500,
             messages: [{
               role: 'user',
@@ -1278,7 +1356,7 @@ app.post('/api/episodes/:id/summarize', async (req, res) => {
   try {
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
     const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-opus-4-7',
       max_tokens: 250,
       messages: [{
         role: 'user',
@@ -1337,7 +1415,7 @@ app.post('/api/episodes/:id/steelman', requireAuth, async (req, res) => {
   try {
     const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-opus-4-7',
       max_tokens: 1500,
       messages: [{
         role: 'user',
@@ -1426,7 +1504,7 @@ ${episode.script.substring(0, 6000)}
 Return ONLY a valid JSON array of source objects. No other text.`;
 
     const discoveryResponse = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-opus-4-7',
       max_tokens: 8000,
       tools: [{ type: 'web_search_20250305', name: 'web_search' }],
       messages: [{ role: 'user', content: discoveryPrompt }]
@@ -1841,7 +1919,7 @@ app.post('/api/admin/migrate/resync-summaries', requireAuth, async (req, res) =>
     try {
       const client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
       const response = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-opus-4-7',
         max_tokens: 250,
         messages: [{
           role: 'user',
