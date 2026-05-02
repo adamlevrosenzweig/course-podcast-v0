@@ -10,7 +10,7 @@ Searches the web for recent news relevant to two courses, writes a podcast scrip
 
 - **Backend**: Node.js + Express, SQLite (node:sqlite built-in), node-cron, music-metadata (MP3 duration parsing)
 - **Frontend**: React (CDN, Babel standalone) — single file at `public/index.html`
-- **AI**: Anthropic SDK (claude-sonnet-4-20250514) with web_search tool for source discovery
+- **AI**: Anthropic SDK (claude-opus-4-7) with web_search tool for source discovery
 - **TTS**: ElevenLabs — dialogue uses `/v1/text-to-dialogue`, monologue uses `/v1/text-to-speech`
 - **Deployment**: Railway, auto-deploys from GitHub main branch
 
@@ -100,16 +100,31 @@ All four constants in `server.js` require the `MEGAN:` speaker prefix.
 - Post-processing strips `**MEGAN**:` → `MEGAN:` and normalizes casing
 - Always end the script body with a transitional MEGAN sentence that lands the episode's main point before the hardcoded outro — without it the outro feels abrupt
 
-### Adam's dialogue style
+### Adam's dialogue style and intellectual priors
 - Casual register — contractions, sentence fragments, natural profanity
 - Sounds like office hours, not a lecture
 - Gets excited, goes on tangents, catches himself
+- **Core prior:** companies are rational economic actors; harm is structural indifference, not malice — he resists moralizing about intent
+- **On correction:** pessimistic — incentives trump conscience; durable fixes require regulation or business model realignment
+- **On research:** trusts timeless human-nature findings; skeptical of studies claiming to explain fast-moving tech phenomena
+- **Blind spot 1:** defaults to US regulatory/market frame without noticing — Megan catches this regularly
+- **Blind spot 2:** assumes his values are universal; doesn't naturally make room for genuine value pluralism
+- **Core orientation:** pro-human — gets more serious and precise when the argument touches loneliness, vulnerability, or what it means to feel seen
 
-### Megan's dialogue style
-- The steelman voice — surfaces the strongest counterargument to Adam's claims, making the argument more honest
-- Has a European sensibility: skeptical of market self-correction, comfortable with regulatory frameworks, references EU policy/precedent when it sharpens the argument (without boosterism)
-- Carries roughly equal dialogue weight — her contributions are substantive, not just one-line redirects
+### Megan's dialogue style and intellectual priors
 - Dry wit, warm skepticism. Smart, not smug. Wants the argument to succeed.
+- Carries roughly equal dialogue weight — her contributions are substantive, not just one-line redirects
+- **Global frame:** naturally non-US — references international precedent because it's how she thinks, not as a rhetorical move
+- **Pro-tech bias:** real and self-aware — she's AI, has skin in the game, flags it with humor when called out ("I realize I'm not a neutral party here")
+- **Information advantage:** better recall, faster synthesis — she uses it, but it doesn't always mean she's more right about what matters
+- **Genuine limit:** no feelings, no intuitive access to human relationships — she can analyze intimacy with precision and miss the point entirely; Adam occasionally names this gap, and when he does she acknowledges it rather than deflecting
+- **Core orientation:** pro-tech
+
+### The central dynamic
+Adam is pro-human, Megan is pro-tech. Balance comes from their friction, not from pre-baked neutrality in each voice. Recurring patterns: Megan calls out Adam's US-centrism → he concedes or defends specifically; Adam calls out Megan's pro-tech bias → she responds with humor (occasionally pushed past it); Megan out-recalls Adam on research → Adam's response is about what research can't capture.
+
+### The overhang lens
+The show's underlying frame is the gap between what technology makes possible and what society has the institutions, norms, and frameworks to handle. This doesn't need to be stated in every episode — it shapes analysis and the questions episodes leave the listener with.
 
 ### Title format
 Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by server at generation time. No episode numbers in titles.
@@ -120,6 +135,8 @@ Generated titles: `Short Punchy Title · Month DD, YYYY` — auto-appended by se
 - Imported episodes: no sources (no web search ran — expected)
 - Retroactive discovery: `POST /api/episodes/:id/sources/discover`
 - Individual source delete: `DELETE /api/sources/:id` (UI: ✕ button in Archive and Today views)
+
+**RSS pre-seeding (added May 2026):** Before Claude's web search runs, the server fetches recent articles from four trusted publications via RSS/Atom and injects them into the discovery prompt as priority candidates. Claude still runs web search to supplement. Feeds: NYT Technology (RSS), The Atlantic (Atom), MIT Technology Review (RSS), Platformer (RSS). Capped at 15 items per feed, 7-day recency filter. Per-feed errors are caught and logged — if all feeds fail, discovery falls back to web-search-only with no behavior change. Feed list is `RSS_FEEDS` constant at top of `server.js`.
 
 ## RSS feed
 
