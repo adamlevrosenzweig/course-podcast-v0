@@ -87,6 +87,7 @@ const RSS_FEEDS = [
   { publication: 'New York Times',       url: 'https://feeds.nytimes.com/nyt/rss/Technology', format: 'rss'  },
   { publication: 'The Atlantic',         url: 'https://www.theatlantic.com/feed/all/',         format: 'atom' },
   { publication: 'MIT Technology Review',url: 'https://www.technologyreview.com/feed/',        format: 'rss'  },
+  { publication: 'Platformer',           url: 'https://www.platformer.news/rss/',              format: 'rss'  },
 ];
 const RSS_PER_FEED_CAP = 15;
 
@@ -1014,7 +1015,7 @@ ${isDialogue
 
       const scriptResponse = await client.messages.create({
         model: 'claude-opus-4-7',
-        max_tokens: 4000,
+        max_tokens: 8000,
         messages: [{ role: 'user', content: scriptPrompt }]
       });
       const rawResponse = scriptResponse.content[0].text.trim();
