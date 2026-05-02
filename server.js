@@ -730,9 +730,6 @@ app.post('/api/episodes/generate', async (req, res) => {
   if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
   if (!isShowActive()) return res.status(403).json({ error: 'Show is currently inactive.' });
 
-  const restDay = await isJewishRestDay();
-  if (restDay.skip) return res.status(403).json({ error: `No episodes on ${restDay.reason}.` });
-
   // Check if generation already running
   const running = Object.values(generationJobs).find(j => j.status === 'running');
   if (running) return res.json({ status: 'running', message: 'Generation already in progress' });
