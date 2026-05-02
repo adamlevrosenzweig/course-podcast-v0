@@ -251,15 +251,42 @@ app.post('/logout', (req, res) => {
   res.redirect('/login');
 });
 
-// ─── EPISODE INTROS ──────────────────────────────────────────────────────────
+// ─── EPISODE INTROS / OUTROS ─────────────────────────────────────────────────
+// Each array holds slight wording variations; pickVariant() selects one randomly.
 
-const INTRO_DIALOGUE = `MEGAN: Hey — I’m Megan, co-host of The Overhang with Adam Rosenzweig. Quick note on what you’re hearing: both of our voices are AI-generated — Adam’s is cloned from his real voice using ElevenLabs, mine is fully synthetic. Scripts are written by Adam and Claude, grounded in his research and courses. We try to get it right, but check anything that matters. Here’s what we’re looking at.`;
+function pickVariant(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
-const INTRO_MEGAN_ONLY = `MEGAN: Hey — I’m Megan, co-host of The Overhang with Adam Rosenzweig. Adam’s out today. My voice is fully synthetic, built on ElevenLabs — the scripts are written by Adam and Claude, grounded in his research and courses. We try to get it right, but check anything that matters. Here’s what we’re looking at.`;
+const INTRO_DIALOGUE_VARIANTS = [
+  `MEGAN: Hey — I’m Megan, co-host of The Overhang with Adam Rosenzweig. As always, a quick note on what you’re hearing: both of our voices are AI-generated — Adam’s is cloned from his real voice, mine is fully synthetic, both courtesy of ElevenLabs. The script is written by Adam, with help from Claude by Anthropic, and is grounded in Adam’s research and courses. We try to get things right, and cited sources are always linked in the show notes. But you should double-check anything that matters. Here’s what we’re looking at.`,
+  `MEGAN: Hey, it’s Megan — co-host of The Overhang with Adam Rosenzweig. Quick transparency note before we dive in: both of our voices are AI-generated. Adam’s is a clone of his real voice, mine is fully synthetic — both via ElevenLabs. The script comes from Adam and Claude, grounded in his research and courses. Sources are in the show notes, and we work hard to get things right — but please verify anything important. Let’s get into it.`,
+  `MEGAN: Hi — I’m Megan, and this is The Overhang with Adam Rosenzweig. A note on what you’re hearing: both voices are AI-generated — Adam’s is cloned from his own voice, mine is fully synthetic, both through ElevenLabs. Scripts are written by Adam with Claude’s help, drawing on his research and courses. We link our sources in the show notes and do our best to be accurate — but check anything that matters. Here’s today’s episode.`,
+  `MEGAN: Hey — Megan here, co-host of The Overhang with Adam Rosenzweig. Just a quick heads up on the voices: both are AI-generated — Adam’s is a clone of his real voice, mine is completely synthetic, both courtesy of ElevenLabs. The script is Adam’s, with a hand from Claude by Anthropic, rooted in his teaching and research. We link sources in the show notes and try to get things right — but verify anything you’re going to act on. Here’s what we’re looking at.`,
+  `MEGAN: Hey, welcome back — I’m Megan, co-host of The Overhang with Adam Rosenzweig. As always: both our voices are AI-generated. Adam’s is cloned from his real voice, mine is fully synthetic, both built on ElevenLabs. Scripts are written by Adam with help from Claude by Anthropic, grounded in his courses and research. We always link our sources in the show notes — and we try to get it right, but don’t skip the double-check. Here’s what we’ve got.`,
+];
 
-const OUTRO_DIALOGUE = `MEGAN: That’s The Overhang for today. We try to get it right, but check anything that matters. See you next time.`;
+const INTRO_MEGAN_ONLY_VARIANTS = [
+  `MEGAN: Hey — I’m Megan, co-host of The Overhang with Adam Rosenzweig. Adam’s out today, so it’s just me. My voice is fully synthetic, built on ElevenLabs — the script is written by Adam with help from Claude by Anthropic, grounded in his research and courses. Sources are linked in the show notes. We try to get things right, but double-check anything that matters. Here’s what we’re looking at.`,
+  `MEGAN: Hi — I’m Megan. Adam Rosenzweig usually co-hosts but he’s out today, so I’m flying solo. My voice is fully synthetic, courtesy of ElevenLabs. The script is Adam’s, with Claude’s help, drawn from his teaching and research. We link sources in the show notes, and we try to be accurate — but verify anything important. Let’s get into it.`,
+  `MEGAN: Hey — Megan here, solo today on The Overhang. Adam Rosenzweig’s out, so it’s just my voice — which is fully synthetic, built on ElevenLabs. The script is Adam’s, written with help from Claude by Anthropic, grounded in his courses and research. Sources are always in the show notes. We try to get things right, but check anything that matters. Here’s today’s episode.`,
+  `MEGAN: Hey — I’m Megan, co-host of The Overhang with Adam Rosenzweig. Adam’s not in today, so it’s just me. Quick note: my voice is entirely AI-generated, courtesy of ElevenLabs. The script comes from Adam and Claude, rooted in his research and courses. We link sources in the show notes and do our best to be accurate — but please verify anything you’re going to act on. Here’s what we’re looking at.`,
+  `MEGAN: Hi, it’s Megan — co-host of The Overhang with Adam Rosenzweig. Adam’s out today, so you’ve got me on my own. My voice is fully synthetic, made with ElevenLabs. Scripts are written by Adam with Claude’s help, drawing on his teaching and research. Sources are always in the show notes, and we aim to get things right — but check anything that matters. Let’s get into it.`,
+];
 
-const OUTRO_MEGAN_ONLY = `MEGAN: That’s The Overhang for today. AI makes mistakes — check anything that matters. See you next time.`;
+const OUTRO_DIALOGUE_VARIANTS = [
+  `MEGAN: That’s The Overhang for today. Our sources are linked in the show notes. We try to get things right but we all make mistakes — please verify anything that matters to you. Follow us on Spotify and Apple Podcasts to get new episodes every week. See you next time.`,
+  `MEGAN: That’s it for today’s Overhang. Sources are in the show notes as always — and please, double-check anything you’re going to act on. We try to be accurate but we’re not infallible. You can find us on Spotify and Apple Podcasts for new episodes every week. See you next time.`,
+  `MEGAN: That wraps up The Overhang for today. Our sources are in the show notes — and as always, verify anything that matters to you. We work hard to get it right, but mistakes happen. Find us on Spotify and Apple Podcasts — new episodes every week. See you next time.`,
+  `MEGAN: And that’s The Overhang. Sources are linked in the show notes — we always try to get things right, but please check anything important. You can follow us on Spotify and Apple Podcasts for weekly episodes. See you next time.`,
+  `MEGAN: That’s a wrap for today’s Overhang. As always, sources are in the show notes. We do our best to be accurate, but please verify anything before you act on it. Follow us on Spotify and Apple Podcasts — new episodes each week. See you next time.`,
+];
+
+const OUTRO_MEGAN_ONLY_VARIANTS = [
+  `MEGAN: That’s The Overhang for today. Sources are in the show notes — we try to get things right but please check anything that matters. You can follow us on Spotify and Apple Podcasts for weekly episodes. See you next time.`,
+  `MEGAN: That wraps up today’s Overhang. Our sources are linked in the show notes. We do our best to be accurate — but please verify anything you’re going to act on. Find us on Spotify and Apple Podcasts for new episodes every week. See you next time.`,
+  `MEGAN: And that’s it for today. Sources are always in the show notes, and we try to get things right — but mistakes happen. Check anything that matters. You can follow The Overhang on Spotify and Apple Podcasts for weekly episodes. See you next time.`,
+  `MEGAN: That’s The Overhang for today. As always, our sources are in the show notes — please double-check anything that matters. Follow us on Spotify and Apple Podcasts for a new episode each week. See you next time.`,
+  `MEGAN: That’s a wrap. Sources are linked in the show notes, and we try to be accurate — but please verify anything important. Find us on Spotify and Apple Podcasts — new episodes every week. See you next time.`,
+];
 
 // ─── DIALOGUE PARSER ─────────────────────────────────────────────────────────
 // Splits a dialogue script into { speaker, text } turns for text-to-dialogue API.
@@ -696,8 +723,8 @@ app.post('/api/episodes/import', (req, res) => {
 
   // Prepend fixed intro and append fixed outro (same as generate flow).
   // .txt files pushed via push-to-railway should contain only the episode body — not the intro/outro.
-  const intro = episode_type === 'megan_only' ? INTRO_MEGAN_ONLY : INTRO_DIALOGUE;
-  const outro = episode_type === 'megan_only' ? OUTRO_MEGAN_ONLY : OUTRO_DIALOGUE;
+  const intro = pickVariant(episode_type === 'megan_only' ? INTRO_MEGAN_ONLY_VARIANTS : INTRO_DIALOGUE_VARIANTS);
+  const outro = pickVariant(episode_type === 'megan_only' ? OUTRO_MEGAN_ONLY_VARIANTS : OUTRO_DIALOGUE_VARIANTS);
   const script = `${intro}\n\n${rawScript}\n\n${outro}`;
 
   const lastEp = db.prepare('SELECT MAX(number) as n FROM episodes').get();
@@ -1062,8 +1089,8 @@ ${isDialogue
         .trim();
 
       // Prepend fixed intro and append fixed outro
-      const intro = episodeType === 'dialogue' ? INTRO_DIALOGUE : INTRO_MEGAN_ONLY;
-      const outro = episodeType === 'dialogue' ? OUTRO_DIALOGUE : OUTRO_MEGAN_ONLY;
+      const intro = pickVariant(episodeType === 'dialogue' ? INTRO_DIALOGUE_VARIANTS : INTRO_MEGAN_ONLY_VARIANTS);
+      const outro = pickVariant(episodeType === 'dialogue' ? OUTRO_DIALOGUE_VARIANTS : OUTRO_MEGAN_ONLY_VARIANTS);
       script = `${intro}\n\n${script}\n\n${outro}`;
 
       const wordCount = script.split(/\s+/).length;
