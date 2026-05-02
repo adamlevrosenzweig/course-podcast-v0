@@ -1022,7 +1022,10 @@ ${isDialogue
       let script, episodeTitle;
       try {
         const jsonText = rawResponse.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-        const parsed = JSON.parse(jsonText);
+        // Claude sometimes emits literal newlines inside JSON string values; escape them before parsing
+        const sanitized = jsonText.replace(/"script"\s*:\s*"([\s\S]*?)",\s*"used_source_indices"/,
+          (_, body) => `"script":${JSON.stringify(body)},"used_source_indices"`);
+        const parsed = JSON.parse(sanitized);
         script = parsed.script || rawResponse;
         episodeTitle = parsed.title || '';
         if (Array.isArray(parsed.used_source_indices)) {
@@ -1030,8 +1033,17 @@ ${isDialogue
           discoveredSources = discoveredSources.filter((_, i) => usedSet.has(i));
         }
       } catch (_) {
-        script = rawResponse;
-        episodeTitle = '';
+        // Last-resort fallback: extract title and script via string search
+        const titleMatch = rawResponse.match(/"title"\s*:\s*"([^"]+)"/);
+        const scriptStart = rawResponse.indexOf('"script":"') + '"script":"'.length;
+        const scriptEnd = rawResponse.lastIndexOf('","used_source_indices"');
+        if (titleMatch && scriptStart > 0 && scriptEnd > scriptStart) {
+          episodeTitle = titleMatch[1];
+          script = rawResponse.slice(scriptStart, scriptEnd);
+        } else {
+          script = rawResponse;
+          episodeTitle = '';
+        }
       }
 
       // Append date to title: "Title · Month DD, YYYY"
