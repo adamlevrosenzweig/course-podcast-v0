@@ -1056,7 +1056,10 @@ ${isDialogue
       script = script
         .replace(/\*\*(MEGAN|ADAM)\*\*\s*:/g, '$1:')   // **MEGAN**: → MEGAN:
         .replace(/\*\*(Megan|Adam)\*\*\s*:/g, (_, n) => n.toUpperCase() + ':') // **Megan**: → MEGAN:
-        .replace(/^(Megan|Adam)\s*:/gm, (_, n) => n.toUpperCase() + ':');      // Megan: → MEGAN:
+        .replace(/^(Megan|Adam)\s*:/gm, (_, n) => n.toUpperCase() + ':')      // Megan: → MEGAN:
+        .replace(/\\n/g, '\n')                          // convert literal \n sequences to real newlines
+        .replace(/\s*(MEGAN:|ADAM:)/g, '\n\n$1')       // ensure each speaker turn starts on its own line
+        .trim();
 
       // Prepend fixed intro and append fixed outro
       const intro = episodeType === 'dialogue' ? INTRO_DIALOGUE : INTRO_MEGAN_ONLY;
