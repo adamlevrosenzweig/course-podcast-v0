@@ -903,6 +903,8 @@ Return ONLY a valid JSON array of source objects. No other text.`;
 
 Both courses share territory: how technology affects vulnerable populations, how business models shape social outcomes, and where ethics and commercial incentives collide.
 
+The show's underlying lens is the gap between what technology makes possible and what society has the institutions, norms, and frameworks to handle — the overhang. This doesn't need to be stated explicitly, but it should shape how stories are analyzed and what questions the episode leaves the listener with.
+
 Write a podcast script for today's briefing (Episode ${episodeNumber}, ${today}) using the following sources.${topic ? ` Today's episode should center on: **${topic}**. Let this be the organizing thread — weave other sources around it, but keep this the focus.` : ''} The script should:
 - Be 10–50 minutes when read aloud
 - Sound like a well-produced, intelligent daily briefing — natural spoken voice, not a list of summaries
