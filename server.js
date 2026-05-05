@@ -616,13 +616,18 @@ app.patch('/api/episodes/:id/status', (req, res) => {
     return res.status(400).json({ error: 'publish_at is required when scheduling an episode' });
   }
 
-  db.prepare('UPDATE episodes SET status = COALESCE(?, status), publish_at = ? WHERE id = ?')
-    .run(status || null, publish_at || null, req.params.id);
+  // When directly publishing (no publish_at supplied), record today so the RSS pubDate
+  // reflects the actual air date rather than the generation date stored in `date`.
+  const effectivePublishAt = publish_at
+    || (status === 'published' && !episode.publish_at ? new Date().toISOString().split('T')[0] : null);
+
+  db.prepare('UPDATE episodes SET status = COALESCE(?, status), publish_at = COALESCE(?, publish_at) WHERE id = ?')
+    .run(status || null, effectivePublishAt || null, req.params.id);
 
   // When publishing, update the title's date suffix to the actual publish date so
   // pre-written episodes don't show the generation date instead of the air date.
   if (status === 'published' && episode.title && / · [A-Za-z]+ \d{1,2}, \d{4}$/.test(episode.title)) {
-    const effectiveDate = publish_at || episode.publish_at || new Date().toISOString().split('T')[0];
+    const effectiveDate = effectivePublishAt || episode.publish_at || new Date().toISOString().split('T')[0];
     const dateLabel = new Date(effectiveDate + 'T12:00:00Z').toLocaleDateString('en-US', {
       month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC'
     });
@@ -1287,7 +1292,7 @@ app.post('/api/episodes/:id/audio', async (req, res) => {
                 voice_id: t.speaker === 'ADAM' ? ELEVENLABS_ADAM_VOICE_ID : ELEVENLABS_VOICE_ID,
                 voice_settings: t.speaker === 'ADAM'
                   ? { stability: 0.50, similarity_boost: 0.75, style: 0.30, use_speaker_boost: true }
-                  : { stability: 0.50, similarity_boost: 0.75, style: 0.20, use_speaker_boost: true }
+                  : { stability: 0.35, similarity_boost: 0.75, style: 0.20, use_speaker_boost: true }
               }))
             },
             { headers: { 'xi-api-key': ELEVENLABS_API_KEY }, responseType: 'arraybuffer', timeout: 300000 }
@@ -1455,7 +1460,7 @@ function buildShowNotes(episodeId, episodeSummary) {
   const summaryHtml = episodeSummary
     ? `<p>${episodeSummary.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`
     : '';
-  const sources = db.prepare('SELECT title, url FROM sources WHERE episode_id = ? AND url IS NOT NULL ORDER BY id').all(episodeId)
+  const sources = db.prepare('SELECT title, url FROM sources WHERE episode_id = ? AND url IS NOT NULL AND contributed = 1 ORDER BY id').all(episodeId)
     .filter(s => /^https?:\/\//i.test(s.url));
   const sourcesHtml = sources.length > 0
     ? `<h3>Sources</h3><ul>${sources.map(s => `<li><a href="${s.url.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">${(s.title || s.url).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</a></li>`).join('')}</ul>`
