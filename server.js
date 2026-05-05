@@ -1404,6 +1404,15 @@ app.post('/api/episodes/:id/sources', requireAuth, (req, res) => {
 
 // POST /api/episodes/:id/sources/discover
 // Runs web search based on episode script and saves discovered sources
+app.patch('/api/sources/:id', requireAuth, (req, res) => {
+  const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(req.params.id);
+  if (!source) return res.status(404).json({ error: 'Not found' });
+  const { contributed } = req.body;
+  if (typeof contributed !== 'boolean') return res.status(400).json({ error: 'contributed (boolean) required' });
+  db.prepare('UPDATE sources SET contributed = ? WHERE id = ?').run(contributed ? 1 : 0, source.id);
+  res.json(db.prepare('SELECT * FROM sources WHERE id = ?').get(source.id));
+});
+
 app.delete('/api/sources/:id', (req, res) => {
   const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(req.params.id);
   if (!source) return res.status(404).json({ error: 'Not found' });
