@@ -638,7 +638,12 @@ app.patch('/api/episodes/:id/status', (req, res) => {
   }
 
   console.log(`[status] Episode ${episode.number} → ${status || episode.status}${publish_at ? ` (publish: ${publish_at})` : ''}`);
-  if (status === 'published') pingWebSub();
+  if (status === 'published') {
+    const freshEp = db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id);
+    const show_notes = buildShowNotes(freshEp.id, freshEp.episode_summary);
+    db.prepare('UPDATE episodes SET show_notes = ? WHERE id = ?').run(show_notes, freshEp.id);
+    pingWebSub();
+  }
   res.json(db.prepare('SELECT * FROM episodes WHERE id = ?').get(req.params.id));
 });
 
